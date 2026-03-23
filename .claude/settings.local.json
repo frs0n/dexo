@@ -18,7 +18,8 @@
       "Bash(make setup:*)",
       "Bash(swift build)",
       "Bash(ls:*)",
-      "Bash(tuist version:*)"
+      "Bash(tuist version:*)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

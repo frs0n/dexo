@@ -1,5 +1,5 @@
-import Foundation
 import Alamofire
+import Foundation
 
 final class DiscourseAPI {
     let baseURL: String
@@ -7,9 +7,9 @@ final class DiscourseAPI {
 
     init(forum: ForumInstance) {
         self.baseURL = forum.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let interceptor = DiscourseAuthInterceptor(baseURL: self.baseURL)
+        let interceptor = DiscourseAuthInterceptor(baseURL: baseURL)
         let config = URLSessionConfiguration.af.default
-        config.protocolClasses = [DoHURLProtocol.self] + (config.protocolClasses ?? [])
+//        config.protocolClasses = [DoHURLProtocol.self] + (config.protocolClasses ?? [])
         self.session = Session(configuration: config, interceptor: interceptor)
     }
 
@@ -17,7 +17,7 @@ final class DiscourseAPI {
         self.baseURL = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let interceptor = DiscourseAuthInterceptor(baseURL: self.baseURL)
         let config = URLSessionConfiguration.af.default
-        config.protocolClasses = [DoHURLProtocol.self] + (config.protocolClasses ?? [])
+//        config.protocolClasses = [DoHURLProtocol.self] + (config.protocolClasses ?? [])
         self.session = Session(configuration: config, interceptor: interceptor)
     }
 
@@ -107,10 +107,11 @@ final class DiscourseAPI {
             .serializingDecodable(T.self)
             .response
 
-        if let statusCode = response.response?.statusCode, !(200..<300).contains(statusCode),
+        if let statusCode = response.response?.statusCode, !(200 ..< 300).contains(statusCode),
            let data = response.data,
            let errBody = try? JSONDecoder().decode(DiscourseErrorResponse.self, from: data),
-           !errBody.errors.isEmpty {
+           !errBody.errors.isEmpty
+        {
             throw DiscourseAPIError(messages: errBody.errors)
         }
 

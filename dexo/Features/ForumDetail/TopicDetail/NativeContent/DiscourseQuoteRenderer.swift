@@ -1,6 +1,6 @@
-import UIKit
 import CookedHTML
 import SDWebImage
+import UIKit
 
 enum DiscourseQuoteRenderer: BlockRenderer {
     static func canRender(_ block: ContentBlock) -> Bool {
@@ -16,7 +16,7 @@ enum DiscourseQuoteRenderer: BlockRenderer {
         let container = UIView()
         container.translatesAutoresizingMaskIntoConstraints = false
         container.backgroundColor = .secondarySystemBackground
-        container.layer.cornerRadius = 8
+//        container.layer.cornerRadius = 8
 
         // Header: avatar + username
         let headerStack = UIStackView()
@@ -81,19 +81,19 @@ enum DiscourseQuoteRenderer: BlockRenderer {
         }
 
         NSLayoutConstraint.activate([
-            headerStack.topAnchor.constraint(equalTo: container.topAnchor, constant: 8),
-            headerStack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
-            headerStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
-
-            bar.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 6),
-            bar.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
-            bar.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8),
+            bar.topAnchor.constraint(equalTo: container.topAnchor),
+            bar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            bar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             bar.widthAnchor.constraint(equalToConstant: 3),
 
-            contentStack.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 6),
+            headerStack.topAnchor.constraint(equalTo: container.topAnchor, constant: 10),
+            headerStack.leadingAnchor.constraint(equalTo: bar.trailingAnchor, constant: 10),
+            headerStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+
+            contentStack.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 8),
             contentStack.leadingAnchor.constraint(equalTo: bar.trailingAnchor, constant: 10),
             contentStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
-            contentStack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8),
+            contentStack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
         ])
 
         return container

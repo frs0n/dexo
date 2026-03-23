@@ -58,7 +58,8 @@ final class SettingsViewController: ObservableViewController {
 
 extension SettingsViewController: UITableViewDataSource {
     func numberOfSections(in tableView: UITableView) -> Int {
-        Section.allCases.count
+//        Section.allCases.count
+        1
     }
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {

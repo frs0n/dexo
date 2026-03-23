@@ -286,6 +286,11 @@ final class PostNativeCell: UITableViewCell {
         }
 
         let emojiSize: CGFloat = 20
+        for entry in entries where entry.isEmoji {
+            entry.attachment.bounds = CGRect(x: 0, y: -3, width: emojiSize, height: emojiSize)
+            entry.attachment.image = UIImage() // 透明占位，防止文件图标
+        }
+
         for entry in entries {
             SDWebImageManager.shared.loadImage(with: entry.url, progress: nil) { [weak textView] image, _, _, _, _, _ in
                 guard let textView, let image else { return }

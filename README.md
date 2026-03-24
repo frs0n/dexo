@@ -4,93 +4,94 @@
 
 <h1 align="center">Dexo</h1>
 
-<p align="center">一个原生 iOS Discourse 论坛客户端，使用 UIKit + Swift 构建。</p>
+<p align="center">A native iOS client for Discourse forums, built with UIKit + Swift.</p>
 
-## 截图
+<p align="center">
+  English | <a href="README.zh-CN.md">中文</a>
+</p>
 
-| 论坛首页  | 帖子详情 | 板块分类 |
+## Screenshots
+
+| Home  | Topic Detail | Categories |
 |:---:|:---:|:---:|
-| ![论坛首页](assets/home.png) | ![帖子详情](assets/detail.png) | ![板块分类](assets/cate.png) |
+| ![Home](assets/home.png) | ![Topic Detail](assets/detail.png) | ![Categories](assets/cate.png) |
 
 
-## 功能
+## Features
 
-- [x] **多论坛管理** — 添加、切换、删除多个 Discourse 实例
-- [x] **帖子浏览** — 最新 / 热门话题列表，无限滚动加载
-- [x] **分类 & 标签** — 按板块或标签浏览话题
-- [x] **帖子详情** — HTML 内容渲染、图片查看、代码块展示、折叠内容
-- [x] **回复** — 回复话题或针对特定楼层回复
-- [x] **安全认证** — 基于 RSA 加密的 Discourse User API Key 认证流程，凭证存储在 Keychain
-- [x] **外观设置** — 跟随系统 / 浅色 / 深色模式
-- [ ] **通知 & 私信** — 查看论坛通知和私信
-- [ ] **发贴** — 发布论坛帖子
+- [x] **Multi-Forum Management** — Add, switch, and remove multiple Discourse instances
+- [x] **Topic Browsing** — Latest / Top topic lists with infinite scrolling
+- [x] **Categories & Tags** — Browse topics by category or tag
+- [x] **Topic Detail** — HTML content rendering, image viewer, code blocks, collapsible sections
+- [x] **Reply** — Reply to topics or to specific posts
+- [x] **Secure Auth** — RSA-based Discourse User API Key authentication with Keychain storage
+- [x] **Appearance** — System / Light / Dark mode
+- [ ] **Notifications & Messages** — View forum notifications and private messages
+- [ ] **Create Topic** — Publish new forum topics
 
-## 技术栈
+## Tech Stack
 
-| 项目 | 说明 |
-|------|------|
-| 语言 | Swift 5 |
-| UI 框架 | UIKit |
-| 最低版本 | iOS 17.0 |
-| 架构 | MVVM + `@Observable` |
-| 构建工具 | [Tuist](https://tuist.dev) |
-| 数据库 | SQLite ([GRDB](https://github.com/groue/GRDB.swift)) |
-| 网络 | [Alamofire](https://github.com/Alamofire/Alamofire) |
-| 图片加载 | [SDWebImage](https://github.com/SDWebImage/SDWebImage) |
-| 图片查看 | [Lightbox](https://github.com/hyperoslo/Lightbox) |
+| Component | Detail |
+|-----------|--------|
+| Language | Swift 5 |
+| UI Framework | UIKit |
+| Minimum Target | iOS 17.0 |
+| Architecture | MVVM + `@Observable` |
+| Build Tool | [Tuist](https://tuist.dev) |
+| Database | SQLite ([GRDB](https://github.com/groue/GRDB.swift)) |
+| Networking | [Alamofire](https://github.com/Alamofire/Alamofire) |
+| Image Loading | [SDWebImage](https://github.com/SDWebImage/SDWebImage) |
+| Image Viewer | [Lightbox](https://github.com/hyperoslo/Lightbox) |
 
-## 快速开始
+## Getting Started
 
-### 前置要求
+### Prerequisites
 
 - Xcode 16+
-- [mise](https://mise.jdx.dev) (工具版本管理)
+- [mise](https://mise.jdx.dev) (runtime version manager)
 
-### 构建
+### Build
 
 ```bash
-# 安装工具、拉取依赖、生成 Xcode 工程（一步到位）
+# Install tools, fetch dependencies, and generate the Xcode project
 make setup
 
-# 后续只需重新生成工程
+# Re-generate the project only
 make generate
 
-# 清理
+# Clean
 make clean
 ```
 
-执行完成后打开生成的 `dexo.xcodeproj`，选择开发团队后即可编译运行。
+Open the generated `dexo.xcodeproj`, select your development team, then build and run.
 
-## 项目结构
+## Project Structure
 
 ```
 dexo/
 ├── Core/
-│   ├── Auth/           # 认证流程、Keychain、RSA 加解密
+│   ├── Auth/           # Auth flow, Keychain, RSA encryption
 │   ├── Networking/     # DoH URLProtocol
-│   ├── Observable/     # ObservableViewController 基类
-│   └── Settings/       # 应用偏好设置
-├── Database/           # GRDB 数据库管理 & 数据模型
+│   ├── Observable/     # ObservableViewController base class
+│   └── Settings/       # App preferences
+├── Database/           # GRDB database manager & models
 ├── Features/
-│   ├── ForumList/      # 论坛列表
+│   ├── ForumList/      # Forum list
 │   ├── ForumDetail/
-│   │   ├── Home/       # 最新 / 热门话题
-│   │   ├── Categories/ # 板块分类
-│   │   ├── Tags/       # 标签话题
-│   │   ├── Messages/   # 私信
-│   │   ├── Notifications/ # 通知
-│   │   └── TopicDetail/   # 帖子详情 & 回复
-│   └── Settings/       # 设置页
+│   │   ├── Home/       # Latest / Top topics
+│   │   ├── Categories/ # Category browsing
+│   │   ├── Tags/       # Tag-based browsing
+│   │   ├── Messages/   # Private messages
+│   │   ├── Notifications/ # Notifications
+│   │   └── TopicDetail/   # Topic detail & replies
+│   └── Settings/       # Settings
 ├── Networking/
-│   ├── DiscourseAPI.swift    # API 客户端
-│   ├── DiscourseRouter.swift # 路由定义
-│   └── Models/               # API 响应模型
+│   ├── DiscourseAPI.swift    # API client
+│   ├── DiscourseRouter.swift # Route definitions
+│   └── Models/               # API response models
 └── Assets.xcassets/
 ```
-## 鸣谢
 
-本项目所使用的 AI 能力均来自 **[Linux.do](https://linux.do)**
+## Links
 
-> 学 AI，上 L 站。
-
-感谢 Linux.do 社区提供的资源与支持，让本项目得以实现。
+- **[Linux.do](https://linux.do)**

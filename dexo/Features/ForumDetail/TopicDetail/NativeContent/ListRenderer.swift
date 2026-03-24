@@ -16,9 +16,17 @@ enum ListRenderer: BlockRenderer {
         paragraphStyle.headIndent = 12
         paragraphStyle.firstLineHeadIndent = 0
 
-        let tabStop = NSTextTab(textAlignment: .left, location: 12, options: [:])
-        paragraphStyle.tabStops = [tabStop]
-        paragraphStyle.defaultTabInterval = 12
+        if ordered {
+            paragraphStyle.headIndent = 20
+            let tabStop = NSTextTab(textAlignment: .left, location: 20, options: [:])
+            paragraphStyle.tabStops = [tabStop]
+            paragraphStyle.defaultTabInterval = 20
+        } else {
+            paragraphStyle.headIndent = 12
+            let tabStop = NSTextTab(textAlignment: .left, location: 12, options: [:])
+            paragraphStyle.tabStops = [tabStop]
+            paragraphStyle.defaultTabInterval = 12
+        }
 
         for (index, item) in items.enumerated() {
             let bullet: String
@@ -27,6 +35,8 @@ enum ListRenderer: BlockRenderer {
             } else {
                 bullet = "\u{2022}\t"
             }
+            let itemStart = result.length
+
             let bulletAttr = NSAttributedString(string: bullet, attributes: [
                 .font: config.baseFont,
                 .foregroundColor: config.baseColor,
@@ -40,6 +50,13 @@ enum ListRenderer: BlockRenderer {
             if index < items.count - 1 {
                 result.append(NSAttributedString(string: "\n"))
             }
+
+            let itemEnd = result.length
+            result.addAttribute(
+                .paragraphStyle,
+                value: paragraphStyle,
+                range: NSRange(location: itemStart, length: itemEnd - itemStart)
+            )
         }
 
         let textView = LinkTextView()

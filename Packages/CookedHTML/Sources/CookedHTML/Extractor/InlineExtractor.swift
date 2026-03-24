@@ -58,6 +58,21 @@ enum InlineExtractor {
         case "span":
             return extract(from: element, options: options, style: style)
 
+        case "div":
+            let classAttr = (try? element.attr("class")) ?? ""
+            if classAttr.contains("lightbox-wrapper") {
+                if let img = try? element.select("img").first() {
+                    let imageNodes = extractImage(from: img, options: options)
+                    if let anchor = try? element.select("a.lightbox").first(),
+                       let href = try? anchor.attr("href"), !href.isEmpty {
+                        let resolvedHref = resolveURL(href, options: options)
+                        return [.link(href: resolvedHref, children: imageNodes)]
+                    }
+                    return imageNodes
+                }
+            }
+            return extract(from: element, options: options, style: style)
+
         default:
             // For other inline elements, just recurse into children
             return extract(from: element, options: options, style: style)

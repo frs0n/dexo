@@ -1,6 +1,6 @@
-import UIKit
 import CookedHTML
 import SDWebImage
+import UIKit
 
 // MARK: - TappableImageContainer
 
@@ -25,7 +25,7 @@ final class TappableImageContainer: UIView {
     private static let referenceWidth: CGFloat = 690
 
     init(url: URL, width: Int?, height: Int?, containerWidth: CGFloat, href: URL? = nil) {
-        self.imageURL = href ?? url
+        imageURL = href ?? url
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
 
@@ -132,7 +132,8 @@ enum ImageRenderer: BlockRenderer {
 
     static func render(_ block: ContentBlock, config: NativeRenderConfig, delegate: PostCellDelegate?) -> UIView {
         guard case .image(let src, _, let width, let height, let href) = block,
-              let url = URL(string: src) else {
+              let url = URL(string: src)
+        else {
             return UIView()
         }
 

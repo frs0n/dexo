@@ -37,29 +37,37 @@ enum TableRenderer: BlockRenderer {
             }
         }
 
-        // Build attributed strings and measure natural widths per column
+        // Build attributed strings, inline nodes, and measure natural widths per column
         var attrGrid: [[NSAttributedString]] = []
-        var boldGrid: [[Bool]] = []
+        var inlinesGrid: [[[InlineNode]]] = []
         var columnMaxWidths: [CGFloat] = Array(repeating: 0, count: columnCount)
 
         func appendRow(cells: [[InlineNode]], bold: Bool) {
             var attrRow: [NSAttributedString] = []
-            var boldRow: [Bool] = []
+            var inlinesRow: [[InlineNode]] = []
             for col in 0..<columnCount {
                 let inlines = col < cells.count ? cells[col] : []
                 let attr = makeAttrString(for: inlines, bold: bold)
-                let textWidth = ceil(attr.boundingRect(
-                    with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude),
-                    options: [.usesLineFragmentOrigin],
-                    context: nil
-                ).width)
-                let naturalWidth = textWidth + cellPaddingH * 2
+                let imageInfo = findPrimaryImage(in: inlines)
+
+                let naturalWidth: CGFloat
+                if let img = imageInfo, let w = img.width, w > 0 {
+                    naturalWidth = CGFloat(w) + cellPaddingH * 2
+                } else {
+                    let textWidth = ceil(attr.boundingRect(
+                        with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude),
+                        options: [.usesLineFragmentOrigin],
+                        context: nil
+                    ).width)
+                    naturalWidth = textWidth + cellPaddingH * 2
+                }
+
                 columnMaxWidths[col] = max(columnMaxWidths[col], naturalWidth)
                 attrRow.append(attr)
-                boldRow.append(bold)
+                inlinesRow.append(inlines)
             }
             attrGrid.append(attrRow)
-            boldGrid.append(boldRow)
+            inlinesGrid.append(inlinesRow)
         }
 
         if !headers.isEmpty {
@@ -108,9 +116,12 @@ enum TableRenderer: BlockRenderer {
             totalAssigned > 0 ? $0 / totalAssigned : 1 / CGFloat(columnCount)
         }
 
-        // MARK: - Cell factory
+        // Compute actual column widths in points for image sizing
+        let columnWidthsPx = ratios.map { $0 * availableWidth }
 
-        func makeCell(attr: NSAttributedString) -> UIView {
+        // MARK: - Cell factories
+
+        func makeTextCell(attr: NSAttributedString) -> UIView {
             let container = UIView()
             container.translatesAutoresizingMaskIntoConstraints = false
 
@@ -136,6 +147,48 @@ enum TableRenderer: BlockRenderer {
             return container
         }
 
+        func makeImageCell(imageInfo: CellImageInfo, columnWidth: CGFloat) -> UIView {
+            let container = UIView()
+            container.translatesAutoresizingMaskIntoConstraints = false
+
+            guard let url = URL(string: imageInfo.src) else { return container }
+
+            let innerWidth = columnWidth - cellPaddingH * 2
+            let hrefURL = imageInfo.href.flatMap { URL(string: $0) }
+
+            // Scale dimensions so the image fills the cell width.
+            // TappableImageContainer uses a 690px reference width, so we scale
+            // the original dimensions to match that reference.
+            let scaledWidth: Int?
+            let scaledHeight: Int?
+            if let w = imageInfo.width, let h = imageInfo.height, w > 0 {
+                scaledWidth = 690
+                scaledHeight = Int(690.0 * CGFloat(h) / CGFloat(w))
+            } else {
+                scaledWidth = nil
+                scaledHeight = nil
+            }
+
+            let imageContainer = TappableImageContainer(
+                url: url,
+                width: scaledWidth,
+                height: scaledHeight,
+                containerWidth: innerWidth,
+                href: hrefURL
+            )
+            imageContainer.delegate = delegate
+
+            container.addSubview(imageContainer)
+            NSLayoutConstraint.activate([
+                imageContainer.topAnchor.constraint(equalTo: container.topAnchor, constant: cellPaddingV),
+                imageContainer.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: cellPaddingH),
+                imageContainer.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -cellPaddingH),
+                imageContainer.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -cellPaddingV),
+            ])
+
+            return container
+        }
+
         func makeSeparator() -> UIView {
             let sep = UIView()
             sep.translatesAutoresizingMaskIntoConstraints = false
@@ -152,7 +205,16 @@ enum TableRenderer: BlockRenderer {
         tableStack.translatesAutoresizingMaskIntoConstraints = false
 
         for (rowIndex, attrRow) in attrGrid.enumerated() {
-            let cells = attrRow.map { makeCell(attr: $0) }
+            let inlinesRow = inlinesGrid[rowIndex]
+
+            let cells: [UIView] = (0..<attrRow.count).map { col in
+                let inlines = inlinesRow[col]
+                if let imageInfo = findPrimaryImage(in: inlines) {
+                    return makeImageCell(imageInfo: imageInfo, columnWidth: columnWidthsPx[col])
+                } else {
+                    return makeTextCell(attr: attrRow[col])
+                }
+            }
 
             // Use plain UIView instead of UIStackView to avoid constraint conflicts
             let rowView = UIView()
@@ -208,6 +270,34 @@ enum TableRenderer: BlockRenderer {
         ])
 
         return borderedContainer
+    }
+
+    // MARK: - Image Detection
+
+    private struct CellImageInfo {
+        let src: String
+        let width: Int?
+        let height: Int?
+        let href: String?
+    }
+
+    /// Find a non-emoji image in a cell's inline nodes.
+    private static func findPrimaryImage(in nodes: [InlineNode]) -> CellImageInfo? {
+        for node in nodes {
+            switch node {
+            case .image(let src, _, let w, let h, let isEmoji):
+                if !isEmoji && ((w ?? 0) > 80 || (h ?? 0) > 80) {
+                    return CellImageInfo(src: src, width: w, height: h, href: nil)
+                }
+            case .link(let href, let children):
+                if let img = findPrimaryImage(in: children) {
+                    return CellImageInfo(src: img.src, width: img.width, height: img.height, href: href)
+                }
+            default:
+                continue
+            }
+        }
+        return nil
     }
 }
 

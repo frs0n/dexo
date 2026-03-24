@@ -20,7 +20,7 @@ final class ReplyComposerViewController: UIViewController {
 
     private let placeholderLabel: UILabel = {
         let label = UILabel()
-        label.text = "输入回复内容..."
+        label.text = String(localized: "reply.placeholder")
         label.font = .systemFont(ofSize: 16)
         label.textColor = .placeholderText
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -72,7 +72,7 @@ final class ReplyComposerViewController: UIViewController {
     }()
 
     private lazy var sendButton: UIBarButtonItem = {
-        UIBarButtonItem(title: "发送", style: .done, target: self, action: #selector(sendTapped))
+        UIBarButtonItem(title: String(localized: "reply.send"), style: .done, target: self, action: #selector(sendTapped))
     }()
 
     init(api: DiscourseAPI, topicId: Int, replyToPost: DiscourseTopicDetail.Post?, baseURL: String) {
@@ -92,12 +92,12 @@ final class ReplyComposerViewController: UIViewController {
         view.backgroundColor = .systemBackground
 
         if let username = replyToPost?.username {
-            title = "回复 @\(username)"
+            title = String(localized: "reply.title.to \(username)")
         } else {
-            title = "回复"
+            title = String(localized: "reply.title")
         }
 
-        navigationItem.leftBarButtonItem = UIBarButtonItem(title: "取消", style: .plain, target: self, action: #selector(cancelTapped))
+        navigationItem.leftBarButtonItem = UIBarButtonItem(title: String(localized: "action.cancel"), style: .plain, target: self, action: #selector(cancelTapped))
         navigationItem.rightBarButtonItem = sendButton
         updateSendButton()
 
@@ -211,7 +211,7 @@ final class ReplyComposerViewController: UIViewController {
                 sendButton.isEnabled = true
                 textView.isEditable = true
                 let alert = UIAlertController(
-                    title: "发送失败",
+                    title: String(localized: "reply.send.failed"),
                     message: error.localizedDescription,
                     preferredStyle: .alert
                 )

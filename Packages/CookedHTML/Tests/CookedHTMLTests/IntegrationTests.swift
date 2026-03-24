@@ -44,7 +44,7 @@ final class IntegrationTests: XCTestCase {
         """
         let blocks = CookedHTMLParser.parse(html: html)
         XCTAssertEqual(blocks.count, 1)
-        if case .onebox(let sourceURL, let title, let desc, _) = blocks[0] {
+        if case .onebox(let sourceURL, let title, let desc, _, _, _, _) = blocks[0] {
             XCTAssertEqual(sourceURL, "https://github.com/test/repo")
             XCTAssertEqual(title, "Test Repo")
             XCTAssertEqual(desc, "A test repository")

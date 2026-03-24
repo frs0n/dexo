@@ -4,6 +4,10 @@ let developmentTeam = Environment.developmentTeam.getString(default: "")
 
 let project = Project(
     name: "dexo",
+    options: .options(
+        defaultKnownRegions: ["en", "zh-Hans"],
+        developmentRegion: "en"
+    ),
     packages: [
         .local(path: "Packages/CookedHTML"),
     ],
@@ -34,6 +38,7 @@ let project = Project(
             resources: .resources([
                 .glob(pattern: "dexo/Assets.xcassets/**"),
                 .glob(pattern: "dexo/AppIcon.icon/**"),
+                .glob(pattern: "dexo/Localizable.xcstrings"),
             ]),
             dependencies: [
                 .external(name: "Alamofire"),

@@ -27,7 +27,7 @@ final class ForumListViewController: ObservableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "Forums"
+        title = String(localized: "tab.forums")
         view.backgroundColor = .systemGroupedBackground
 
         navigationItem.rightBarButtonItem = UIBarButtonItem(
@@ -96,14 +96,14 @@ extension ForumListViewController: UITableViewDelegate {
         guard !settings.hasShownAutoOpenPrompt else { return }
         settings.hasShownAutoOpenPrompt = true
         let alert = UIAlertController(
-            title: "自动打开论坛",
-            message: "是否在启动时自动打开该论坛？",
+            title: String(localized: "forum.auto_open.title"),
+            message: String(localized: "forum.auto_open.message"),
             preferredStyle: .alert
         )
-        alert.addAction(UIAlertAction(title: "开启", style: .default) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: String(localized: "action.enable"), style: .default) { [weak self] _ in
             self?.settings.autoOpenLastForum = true
         })
-        alert.addAction(UIAlertAction(title: "不了", style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "action.no_thanks"), style: .cancel))
         presentedViewController?.present(alert, animated: true)
     }
 

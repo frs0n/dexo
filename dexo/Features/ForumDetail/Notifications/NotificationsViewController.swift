@@ -6,7 +6,7 @@ final class NotificationsViewController: ObservableViewController {
 
     private let placeholderLabel: UILabel = {
         let label = UILabel()
-        label.text = "Notifications"
+        label.text = String(localized: "notifications.title")
         label.textColor = .secondaryLabel
         label.textAlignment = .center
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -15,7 +15,7 @@ final class NotificationsViewController: ObservableViewController {
 
     private let loginButton: UIButton = {
         var config = UIButton.Configuration.filled()
-        config.title = "Log in to see notifications"
+        config.title = String(localized: "notifications.login_prompt")
         config.cornerStyle = .medium
         let button = UIButton(configuration: config)
         button.translatesAutoresizingMaskIntoConstraints = false
@@ -57,13 +57,13 @@ final class NotificationsViewController: ObservableViewController {
 
     private func refreshForAuthState() {
         if authGate?.isAuthenticated() == true {
-            placeholderLabel.text = "Loading notifications..."
+            placeholderLabel.text = String(localized: "notifications.loading")
             loginButton.isHidden = true
             Task {
                 await viewModel.loadNotifications()
             }
         } else {
-            placeholderLabel.text = "Notifications"
+            placeholderLabel.text = String(localized: "notifications.title")
             loginButton.isHidden = false
             viewModel.notifications = []
         }
@@ -71,16 +71,16 @@ final class NotificationsViewController: ObservableViewController {
 
     override func updateUI() {
         if authGate?.isAuthenticated() != true {
-            placeholderLabel.text = "Notifications"
+            placeholderLabel.text = String(localized: "notifications.title")
             loginButton.isHidden = false
             return
         }
 
         loginButton.isHidden = true
         if viewModel.notifications.isEmpty {
-            placeholderLabel.text = viewModel.isLoading ? "Loading notifications..." : "No notifications"
+            placeholderLabel.text = viewModel.isLoading ? String(localized: "notifications.loading") : String(localized: "notifications.empty")
         } else {
-            placeholderLabel.text = "\(viewModel.notifications.count) notifications"
+            placeholderLabel.text = String(localized: "notifications.count \(viewModel.notifications.count)")
         }
     }
 

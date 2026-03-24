@@ -17,7 +17,7 @@ final class EmojiPickerView: UIView {
     private var selectedTab = 0
 
     private let segmentedControl: UISegmentedControl = {
-        let sc = UISegmentedControl(items: ["Unicode", "社区表情"])
+        let sc = UISegmentedControl(items: ["Unicode", String(localized: "emoji.community")])
         sc.selectedSegmentIndex = 0
         sc.translatesAutoresizingMaskIntoConstraints = false
         return sc

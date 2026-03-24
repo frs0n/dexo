@@ -6,7 +6,7 @@ final class MessagesViewController: ObservableViewController {
 
     private let placeholderLabel: UILabel = {
         let label = UILabel()
-        label.text = "Messages"
+        label.text = String(localized: "messages.title")
         label.textColor = .secondaryLabel
         label.textAlignment = .center
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -15,7 +15,7 @@ final class MessagesViewController: ObservableViewController {
 
     private let loginButton: UIButton = {
         var config = UIButton.Configuration.filled()
-        config.title = "Log in to see messages"
+        config.title = String(localized: "messages.login_prompt")
         config.cornerStyle = .medium
         let button = UIButton(configuration: config)
         button.translatesAutoresizingMaskIntoConstraints = false
@@ -64,7 +64,7 @@ final class MessagesViewController: ObservableViewController {
                 await viewModel.loadMessages(username: username)
             }
         } else {
-            placeholderLabel.text = "Messages"
+            placeholderLabel.text = String(localized: "messages.title")
             loginButton.isHidden = false
             viewModel.messages = []
         }
@@ -72,16 +72,16 @@ final class MessagesViewController: ObservableViewController {
 
     override func updateUI() {
         if authGate?.isAuthenticated() != true {
-            placeholderLabel.text = "Messages"
+            placeholderLabel.text = String(localized: "messages.title")
             loginButton.isHidden = false
             return
         }
 
         loginButton.isHidden = true
         if viewModel.messages.isEmpty {
-            placeholderLabel.text = viewModel.isLoading ? "Loading messages..." : "No messages"
+            placeholderLabel.text = viewModel.isLoading ? String(localized: "messages.loading") : String(localized: "messages.empty")
         } else {
-            placeholderLabel.text = "\(viewModel.messages.count) messages"
+            placeholderLabel.text = String(localized: "messages.count \(viewModel.messages.count)")
         }
     }
 

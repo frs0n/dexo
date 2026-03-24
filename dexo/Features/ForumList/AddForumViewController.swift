@@ -19,7 +19,7 @@ final class AddForumViewController: ObservableViewController {
 
     private let addButton: UIButton = {
         var config = UIButton.Configuration.filled()
-        config.title = "Add Forum"
+        config.title = String(localized: "add_forum.button")
         config.cornerStyle = .medium
         let button = UIButton(configuration: config)
         button.translatesAutoresizingMaskIntoConstraints = false
@@ -45,7 +45,7 @@ final class AddForumViewController: ObservableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "Add Forum"
+        title = String(localized: "add_forum.title")
         view.backgroundColor = .systemGroupedBackground
 
         navigationItem.leftBarButtonItem = UIBarButtonItem(

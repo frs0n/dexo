@@ -64,7 +64,12 @@ final class ForumContainerViewController: UIViewController, AuthGating {
         guard let tabBarVC = children.first as? ForumTabBarController,
               let viewControllers = tabBarVC.viewControllers else { return }
 
-        let titles = ["Home", "Categories", "Notifications", "Messages"]
+        let titles = [
+            String(localized: "tab.home"),
+            String(localized: "tab.categories"),
+            String(localized: "tab.notifications"),
+            String(localized: "tab.messages"),
+        ]
 
         for (i, navVC) in viewControllers.enumerated() {
             guard let nav = navVC as? UINavigationController,

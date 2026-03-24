@@ -229,7 +229,7 @@ final class PostNativeCell: UITableViewCell {
         let hasReplies = post.replyCount > 0
         showRepliesButton.isHidden = !hasReplies
         if hasReplies {
-            showRepliesButton.setTitle("▼ \(post.replyCount) 条回复", for: .normal)
+            showRepliesButton.setTitle(String(localized: "post.replies \(post.replyCount)"), for: .normal)
         }
 
         // Render content blocks

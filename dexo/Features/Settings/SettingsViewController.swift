@@ -13,7 +13,7 @@ final class SettingsViewController: ObservableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "Settings"
+        title = String(localized: "tab.settings")
         view.backgroundColor = .systemGroupedBackground
 
         view.addSubview(tableView)
@@ -34,7 +34,19 @@ final class SettingsViewController: ObservableViewController {
     private enum Section: Int, CaseIterable {
         case general
         case appearance
+        #if DEBUG
+        case debug
+        #endif
         case network
+    }
+
+    /// Sections actually shown in the table, in order.
+    private var visibleSections: [Section] {
+        #if DEBUG
+        return [.general, .appearance, .debug]
+        #else
+        return [.general, .appearance]
+        #endif
     }
 
     private func networkRows() -> [NetworkRow] {
@@ -59,28 +71,33 @@ final class SettingsViewController: ObservableViewController {
 
 extension SettingsViewController: UITableViewDataSource {
     func numberOfSections(in tableView: UITableView) -> Int {
-//        Section.allCases.count
-        2
+        visibleSections.count
     }
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        switch Section(rawValue: section)! {
+        switch visibleSections[section] {
         case .general: return 1
         case .appearance: return 1
         case .network: return networkRows().count
+        #if DEBUG
+        case .debug: return 1
+        #endif
         }
     }
 
     func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        switch Section(rawValue: section)! {
-        case .general: return "通用"
-        case .appearance: return "外观"
-        case .network: return "网络"
+        switch visibleSections[section] {
+        case .general: return String(localized: "settings.section.general")
+        case .appearance: return String(localized: "settings.section.appearance")
+        case .network: return String(localized: "settings.section.network")
+        #if DEBUG
+        case .debug: return "Debug"
+        #endif
         }
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        switch Section(rawValue: indexPath.section)! {
+        switch visibleSections[indexPath.section] {
         case .general:
             return makeAutoOpenCell(tableView, indexPath: indexPath)
         case .appearance:
@@ -95,6 +112,10 @@ extension SettingsViewController: UITableViewDataSource {
             case .dohCustomURL:
                 return makeDohCustomURLCell(tableView, indexPath: indexPath)
             }
+        #if DEBUG
+        case .debug:
+            return makeRenderPreviewCell(tableView, indexPath: indexPath)
+        #endif
         }
     }
 
@@ -102,7 +123,7 @@ extension SettingsViewController: UITableViewDataSource {
 
     private func makeAutoOpenCell(_ tableView: UITableView, indexPath: IndexPath) -> UITableViewCell {
         let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
-        cell.textLabel?.text = "启动时打开上次论坛"
+        cell.textLabel?.text = String(localized: "settings.auto_open_last_forum")
         cell.selectionStyle = .none
         let toggle = UISwitch()
         toggle.isOn = settings.autoOpenLastForum
@@ -113,7 +134,7 @@ extension SettingsViewController: UITableViewDataSource {
 
     private func makeAppearanceCell(_ tableView: UITableView, indexPath: IndexPath) -> UITableViewCell {
         let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
-        cell.textLabel?.text = "深色模式"
+        cell.textLabel?.text = String(localized: "settings.dark_mode")
         cell.detailTextLabel?.text = settings.appearanceMode.title
         cell.accessoryType = .disclosureIndicator
         return cell
@@ -132,7 +153,7 @@ extension SettingsViewController: UITableViewDataSource {
 
     private func makeDohProviderCell(_ tableView: UITableView, indexPath: IndexPath) -> UITableViewCell {
         let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
-        cell.textLabel?.text = "提供商"
+        cell.textLabel?.text = "Provider"
         cell.detailTextLabel?.text = settings.dohProvider.title
         cell.accessoryType = .disclosureIndicator
         return cell
@@ -140,12 +161,21 @@ extension SettingsViewController: UITableViewDataSource {
 
     private func makeDohCustomURLCell(_ tableView: UITableView, indexPath: IndexPath) -> UITableViewCell {
         let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
-        cell.textLabel?.text = "自定义 URL"
-        cell.detailTextLabel?.text = settings.dohCustomURL.isEmpty ? "未设置" : settings.dohCustomURL
+        cell.textLabel?.text = "Custom URL"
+        cell.detailTextLabel?.text = settings.dohCustomURL.isEmpty ? "Not Set" : settings.dohCustomURL
         cell.detailTextLabel?.textColor = settings.dohCustomURL.isEmpty ? .placeholderText : .secondaryLabel
         cell.accessoryType = .disclosureIndicator
         return cell
     }
+
+    #if DEBUG
+    private func makeRenderPreviewCell(_ tableView: UITableView, indexPath: IndexPath) -> UITableViewCell {
+        let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+        cell.textLabel?.text = "Render Preview"
+        cell.accessoryType = .disclosureIndicator
+        return cell
+    }
+    #endif
 }
 
 // MARK: - UITableViewDelegate
@@ -154,7 +184,7 @@ extension SettingsViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
 
-        switch Section(rawValue: indexPath.section)! {
+        switch visibleSections[indexPath.section] {
         case .general:
             break
         case .appearance:
@@ -169,6 +199,10 @@ extension SettingsViewController: UITableViewDelegate {
             default:
                 break
             }
+        #if DEBUG
+        case .debug:
+            showRenderPreviewInput()
+        #endif
         }
     }
 }
@@ -189,11 +223,13 @@ extension SettingsViewController {
     }
 
     private func reloadNetworkSection() {
-        tableView.reloadSections(IndexSet(integer: Section.network.rawValue), with: .automatic)
+        if let idx = visibleSections.firstIndex(of: .network) {
+            tableView.reloadSections(IndexSet(integer: idx), with: .automatic)
+        }
     }
 
     private func showAppearancePicker() {
-        let alert = UIAlertController(title: "深色模式", message: nil, preferredStyle: .actionSheet)
+        let alert = UIAlertController(title: String(localized: "settings.dark_mode"), message: nil, preferredStyle: .actionSheet)
         for mode in AppSettings.AppearanceMode.allCases {
             let action = UIAlertAction(title: mode.title, style: .default) { [weak self] _ in
                 self?.settings.appearanceMode = mode
@@ -204,12 +240,12 @@ extension SettingsViewController {
             }
             alert.addAction(action)
         }
-        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "action.cancel"), style: .cancel))
         present(alert, animated: true)
     }
 
     private func showDohProviderPicker() {
-        let alert = UIAlertController(title: "DoH 提供商", message: nil, preferredStyle: .actionSheet)
+        let alert = UIAlertController(title: "DoH Provider", message: nil, preferredStyle: .actionSheet)
         for provider in AppSettings.DoHProvider.allCases {
             let action = UIAlertAction(title: provider.title, style: .default) { [weak self] _ in
                 self?.settings.dohProvider = provider
@@ -221,26 +257,53 @@ extension SettingsViewController {
             }
             alert.addAction(action)
         }
-        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         present(alert, animated: true)
     }
 
+    #if DEBUG
+    private func showRenderPreviewInput() {
+        let alert = UIAlertController(title: "Render Preview", message: "Enter Topic URL", preferredStyle: .alert)
+        alert.addTextField { textField in
+            textField.placeholder = "https://linux.do/t/topic/12345"
+            textField.keyboardType = .URL
+            textField.autocapitalizationType = .none
+            textField.autocorrectionType = .no
+        }
+        alert.addAction(UIAlertAction(title: "Open", style: .default) { [weak self] _ in
+            guard let self,
+                  let text = alert.textFields?.first?.text,
+                  let url = URL(string: text),
+                  let host = url.host,
+                  let topicId = url.pathComponents.last.flatMap(Int.init)
+            else { return }
+            let scheme = url.scheme ?? "https"
+            let baseURL = "\(scheme)://\(host)"
+            let api = DiscourseAPI(baseURL: baseURL)
+            let vc = TopicDetailViewController(api: api, topicId: topicId)
+            self.navigationController?.pushViewController(vc, animated: true)
+        })
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        present(alert, animated: true)
+    }
+    #endif
+
     private func showCustomURLInput() {
-        let alert = UIAlertController(title: "自定义 DoH URL", message: "输入 DNS over HTTPS 服务器地址", preferredStyle: .alert)
+        let alert = UIAlertController(title: "Custom DoH URL", message: "Enter DNS over HTTPS server address", preferredStyle: .alert)
         alert.addTextField { [weak self] textField in
             textField.text = self?.settings.dohCustomURL
             textField.placeholder = "https://example.com/dns-query"
             textField.keyboardType = .URL
             textField.autocapitalizationType = .none
         }
-        alert.addAction(UIAlertAction(title: "确定", style: .default) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
             if let url = alert.textFields?.first?.text {
                 self?.settings.dohCustomURL = url
                 DoHResolver.shared.clearCache()
                 self?.reloadNetworkSection()
             }
         })
-        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         present(alert, animated: true)
     }
 }

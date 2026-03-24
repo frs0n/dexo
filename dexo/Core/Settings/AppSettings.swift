@@ -15,9 +15,9 @@ final class AppSettings {
 
         var title: String {
             switch self {
-            case .system: return "跟随系统"
-            case .light: return "浅色"
-            case .dark: return "深色"
+            case .system: return String(localized: "appearance.system")
+            case .light: return String(localized: "appearance.light")
+            case .dark: return String(localized: "appearance.dark")
             }
         }
 
@@ -89,7 +89,7 @@ final class AppSettings {
             case .google: return "Google (8.8.8.8)"
             case .quad9: return "Quad9 (9.9.9.9)"
             case .alidns: return "AliDNS (223.5.5.5)"
-            case .custom: return "自定义"
+            case .custom: return String(localized: "doh.provider.custom")
             }
         }
 

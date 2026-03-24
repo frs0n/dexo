@@ -78,13 +78,15 @@ public extension InlineNode {
 
         case .image(let src, _, let width, let height, let isEmoji):
             if isEmoji {
-                let emojiSize = config.baseFont.lineHeight
+                let emojiSize = config.baseFont.pointSize
+                let yOffset = (config.baseFont.capHeight - emojiSize) / 2
                 let attachment = NSTextAttachment()
-                attachment.bounds = CGRect(x: 0, y: -3, width: emojiSize, height: emojiSize)
+                attachment.bounds = CGRect(x: 0, y: yOffset, width: emojiSize, height: emojiSize)
                 attachment.image = UIImage()
                 let attrStr = NSMutableAttributedString(attachment: attachment)
                 let range = NSRange(location: 0, length: attrStr.length)
                 attrStr.addAttribute(.cookedHTMLImageURL, value: src, range: range)
+                attrStr.addAttribute(.font, value: config.baseFont, range: range)
                 return attrStr
             }
             // Non-emoji inline image: create a placeholder attachment

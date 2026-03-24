@@ -147,4 +147,24 @@ final class BlockExtractorTests: XCTestCase {
         let blocks = CookedHTMLParser.parse(html: html)
         XCTAssertEqual(blocks.count, 1)
     }
+
+    // MARK: - Lightbox + inline text
+
+    func testLightboxFollowedByTextAndEmoji() {
+        let html = "<p><div class=\"lightbox-wrapper\"><a class=\"lightbox\" href=\"https://cdn3.linux.do/original/img.jpeg\"><img src=\"https://cdn3.linux.do/optimized/img_245x500.jpeg\" alt=\"Screenshot\" width=\"245\" height=\"500\"><div class=\"meta\"></div></a></div><br>\n点开看到它了，这下真是全民<img src=\"https://cdn.linux.do/images/emoji/twemoji/lobster.png?v=15\" class=\"emoji\" alt=\"lobster\" width=\"20\" height=\"20\">了，微信那么庞大用户</p>"
+        let blocks = CookedHTMLParser.parse(html: html)
+        for (i, b) in blocks.enumerated() { print("Block \(i): \(b)") }
+        // Should be: image block + single paragraph (text + emoji + text)
+        XCTAssertEqual(blocks.count, 2, "Expected image + paragraph, got \(blocks.count) blocks: \(blocks)")
+        if case .paragraph(let inlines) = blocks[1] {
+            // Last inline should be the text after emoji
+            if case .text(let t) = inlines.last {
+                XCTAssertEqual(t, "了，微信那么庞大用户")
+            } else {
+                XCTFail("Last inline should be trailing text, got \(inlines)")
+            }
+        } else {
+            XCTFail("Block 1 should be paragraph, got \(blocks[1])")
+        }
+    }
 }

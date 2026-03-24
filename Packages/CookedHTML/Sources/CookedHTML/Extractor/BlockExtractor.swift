@@ -25,7 +25,7 @@ enum BlockExtractor {
 
     /// Extract annotated blocks (block + source HTML) from a parent element's children.
     static func extractAnnotated(from parent: Element, options: ParseOptions) -> [AnnotatedBlock] {
-        var result: [AnnotatedBlock] = []
+        var raw: [AnnotatedBlock] = []
         for child in parent.getChildNodes() {
             let blocks = extractNode(child, options: options).compactMap { trimBlock($0) }
             guard !blocks.isEmpty else { continue }
@@ -38,8 +38,38 @@ enum BlockExtractor {
                 sourceHTML = ""
             }
             for block in blocks {
-                result.append(AnnotatedBlock(block: block, sourceHTML: sourceHTML))
+                raw.append(AnnotatedBlock(block: block, sourceHTML: sourceHTML))
             }
+        }
+        // Apply the same inline-image merging as extract(), preserving sourceHTML by
+        // concatenating the HTML of merged siblings.
+        guard raw.count > 1 else { return raw }
+        var result: [AnnotatedBlock] = []
+        for annotated in raw {
+            guard let lastIndex = result.indices.last else {
+                result.append(annotated)
+                continue
+            }
+            let prev = result[lastIndex]
+            // Case 1: small image → inline emoji in preceding paragraph
+            if case .image(let src, let alt, let w, let h, _) = annotated.block,
+               let w, let h, w <= 80, h <= 80,
+               case .paragraph(let inlines) = prev.block
+            {
+                let merged = ContentBlock.paragraph(inlines + [.image(src: src, alt: alt, width: w, height: h, isEmoji: true)])
+                result[lastIndex] = AnnotatedBlock(block: merged, sourceHTML: prev.sourceHTML + annotated.sourceHTML)
+                continue
+            }
+            // Case 2: paragraph following a paragraph that ends with inline emoji → merge
+            if case .paragraph(let newInlines) = annotated.block,
+               case .paragraph(let prevInlines) = prev.block,
+               case .image(_, _, _, _, let isEmoji) = prevInlines.last, isEmoji
+            {
+                let merged = ContentBlock.paragraph(prevInlines + newInlines)
+                result[lastIndex] = AnnotatedBlock(block: merged, sourceHTML: prev.sourceHTML + annotated.sourceHTML)
+                continue
+            }
+            result.append(annotated)
         }
         return result
     }
@@ -90,6 +120,11 @@ enum BlockExtractor {
 
         case "details":
             return extractDetails(from: element, options: options)
+
+        case "br":
+            // Bare <br> at block level is a DOM artifact from SwiftSoup splitting block-in-inline;
+            // ignore it rather than emitting a lineBreak paragraph.
+            return []
 
         case "hr":
             return [.divider]
@@ -302,22 +337,36 @@ enum BlockExtractor {
         }
     }
 
-    /// Merge small emoji-sized `.image` blocks that immediately follow a `.paragraph`
-    /// back into that paragraph as inline image nodes.
-    /// This handles cases where text + emoji `<img>` are siblings without `<p>` wrapping.
+    /// Merge blocks that result from SwiftSoup splitting inline content into separate top-level nodes.
+    /// Handles two cases:
+    /// 1. Small (emoji-sized) `.image` blocks following a `.paragraph` → merged as inline image.
+    /// 2. Consecutive `.paragraph` blocks that are bare siblings (no intervening block) → merged.
     private static func mergeInlineImageBlocks(_ blocks: [ContentBlock]) -> [ContentBlock] {
         guard blocks.count > 1 else { return blocks }
         var result: [ContentBlock] = []
         for block in blocks {
+            guard let lastIndex = result.indices.last else {
+                result.append(block)
+                continue
+            }
+            // Case 1: small image following a paragraph → inline emoji
             if case .image(let src, let alt, let w, let h, _) = block,
                let w, let h, w <= 80, h <= 80,
-               let lastIndex = result.indices.last,
                case .paragraph(let inlines) = result[lastIndex]
             {
                 result[lastIndex] = .paragraph(inlines + [.image(src: src, alt: alt, width: w, height: h, isEmoji: true)])
-            } else {
-                result.append(block)
+                continue
             }
+            // Case 2: bare text/inline paragraph following a paragraph that ends with an inline image
+            // (handles SwiftSoup splitting "text<img>text" into separate top-level nodes)
+            if case .paragraph(let newInlines) = block,
+               case .paragraph(let prevInlines) = result[lastIndex],
+               case .image(_, _, _, _, let isEmoji) = prevInlines.last, isEmoji
+            {
+                result[lastIndex] = .paragraph(prevInlines + newInlines)
+                continue
+            }
+            result.append(block)
         }
         return result
     }

@@ -6,7 +6,7 @@ final class HomeViewController: ObservableViewController {
     private weak var authGate: AuthGating?
 
     private let segmentedControl: UISegmentedControl = {
-        let sc = UISegmentedControl(items: ["Latest", "Top"])
+        let sc = UISegmentedControl(items: [String(localized: "home.latest"), String(localized: "home.top")])
         sc.selectedSegmentIndex = 0
         sc.translatesAutoresizingMaskIntoConstraints = false
         return sc

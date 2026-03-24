@@ -9,7 +9,7 @@ final class AddForumViewModel {
     func addForum() async -> Bool {
         let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            errorMessage = "Please enter a URL."
+            errorMessage = String(localized: "add_forum.error.empty_url")
             return false
         }
 
@@ -20,7 +20,7 @@ final class AddForumViewModel {
         normalized = normalized.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
 
         guard URL(string: normalized) != nil else {
-            errorMessage = "Invalid URL."
+            errorMessage = String(localized: "add_forum.error.invalid_url")
             return false
         }
 
@@ -41,7 +41,7 @@ final class AddForumViewModel {
             isLoading = false
             return true
         } catch {
-            errorMessage = "Could not connect: \(error.localizedDescription)"
+            errorMessage = String(localized: "add_forum.error.connect \(error.localizedDescription)")
             isLoading = false
             return false
         }

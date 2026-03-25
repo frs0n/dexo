@@ -53,10 +53,9 @@ final class ForumListViewController: ObservableViewController {
         hasAttemptedAutoOpen = true
         guard settings.autoOpenLastForum,
               let lastId = settings.lastOpenedForumId,
-              let forum = viewModel.forums.first(where: { $0.id == lastId }) else { return }
-        let containerVC = ForumContainerViewController(forum: forum)
-        containerVC.modalPresentationStyle = .fullScreen
-        present(containerVC, animated: true)
+              let forum = viewModel.forums.first(where: { $0.id == lastId }),
+              let window = view.window else { return }
+        ForumOverlayManager.shared.present(forum: forum, in: window)
     }
 
     override func updateUI() {
@@ -82,14 +81,12 @@ final class ForumListViewController: ObservableViewController {
 extension ForumListViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        guard indexPath.row < viewModel.forums.count else { return }
+        guard indexPath.row < viewModel.forums.count,
+              let window = view.window else { return }
         let forum = viewModel.forums[indexPath.row]
         settings.lastOpenedForumId = forum.id
-        let containerVC = ForumContainerViewController(forum: forum)
-        containerVC.modalPresentationStyle = .fullScreen
-        present(containerVC, animated: true) { [weak self] in
-            self?.showAutoOpenPromptIfNeeded()
-        }
+        ForumOverlayManager.shared.present(forum: forum, in: window)
+        showAutoOpenPromptIfNeeded()
     }
 
     private func showAutoOpenPromptIfNeeded() {
@@ -104,7 +101,9 @@ extension ForumListViewController: UITableViewDelegate {
             self?.settings.autoOpenLastForum = true
         })
         alert.addAction(UIAlertAction(title: String(localized: "action.no_thanks"), style: .cancel))
-        presentedViewController?.present(alert, animated: true)
+        if let containerVC = ForumOverlayManager.shared.currentContainer {
+            containerVC.present(alert, animated: true)
+        }
     }
 
     func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {

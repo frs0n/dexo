@@ -13,6 +13,7 @@ final class HomeViewModel {
     var isLoadingMore = false
     var canLoadMore = false
     var errorMessage: String?
+    var requiresLogin = false
 
     private let api: DiscourseAPI
     private var currentPage = 0
@@ -36,6 +37,7 @@ final class HomeViewModel {
     func loadTopics() async {
         isLoading = true
         errorMessage = nil
+        requiresLogin = false
         currentPage = 0
         do {
             async let categoriesResult: Void = loadCategoriesIfNeeded()
@@ -51,6 +53,9 @@ final class HomeViewModel {
             canLoadMore = result.topicList.moreTopicsUrl != nil
             indexUsers(result.users)
         } catch {
+            if let apiError = error as? DiscourseAPIError, apiError.isNotLoggedIn {
+                requiresLogin = true
+            }
             errorMessage = error.localizedDescription
         }
         isLoading = false

@@ -158,7 +158,7 @@ final class AuthManager: @unchecked Sendable {
         // 9. Fetch current user to get username
         let api = DiscourseAPI(baseURL: baseURL)
         do {
-            let currentUser = try await api.fetchCurrentUser()
+            let currentUser = try await api.fetchNotifications()
             usernameCache[baseURL] = currentUser.username
 
             // Persist username to DB

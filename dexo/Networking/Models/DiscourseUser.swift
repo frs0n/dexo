@@ -19,3 +19,36 @@ struct DiscourseCurrentUser: Decodable {
         case avatarTemplate = "avatar_template"
     }
 }
+
+struct DiscourseUserProfileResponse: Decodable {
+    let user: DiscourseUserProfile
+}
+
+struct DiscourseUserProfile: Decodable {
+    let id: Int
+    let username: String
+    let name: String?
+    let avatarTemplate: String?
+    let title: String?
+    let trustLevel: Int?
+    let badgeCount: Int?
+    let profileViewCount: Int?
+    let timeRead: Int?
+    let createdAt: String?
+    let bioExcerpt: String?
+    let flairName: String?
+    let flairUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, username, name, title
+        case avatarTemplate = "avatar_template"
+        case trustLevel = "trust_level"
+        case badgeCount = "badge_count"
+        case profileViewCount = "profile_view_count"
+        case timeRead = "time_read"
+        case createdAt = "created_at"
+        case bioExcerpt = "bio_excerpt"
+        case flairName = "flair_name"
+        case flairUrl = "flair_url"
+    }
+}

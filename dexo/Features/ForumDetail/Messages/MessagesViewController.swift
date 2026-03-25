@@ -48,31 +48,15 @@ final class MessagesViewController: ObservableViewController {
         ])
 
         loginButton.addTarget(self, action: #selector(loginTapped), for: .touchUpInside)
-    }
 
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        refreshForAuthState()
-    }
-
-    private func refreshForAuthState() {
-        if authGate?.isAuthenticated() == true,
-           let username = authGate?.currentUsername() {
-            placeholderLabel.text = "Loading messages..."
-            loginButton.isHidden = true
-            Task {
-                await viewModel.loadMessages(username: username)
-            }
-        } else {
-            placeholderLabel.text = String(localized: "messages.title")
-            loginButton.isHidden = false
-            viewModel.messages = []
+        Task {
+            await viewModel.loadMessages(username: authGate?.currentUsername() ?? "")
         }
     }
 
     override func updateUI() {
-        if authGate?.isAuthenticated() != true {
-            placeholderLabel.text = String(localized: "messages.title")
+        if viewModel.requiresLogin {
+            placeholderLabel.text = viewModel.errorMessage
             loginButton.isHidden = false
             return
         }
@@ -87,7 +71,10 @@ final class MessagesViewController: ObservableViewController {
 
     @objc private func loginTapped() {
         authGate?.requireAuth { [weak self] in
-            self?.refreshForAuthState()
+            guard let self else { return }
+            Task {
+                await self.viewModel.loadMessages(username: self.authGate?.currentUsername() ?? "")
+            }
         }
     }
 }

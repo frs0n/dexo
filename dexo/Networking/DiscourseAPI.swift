@@ -93,6 +93,56 @@ final class DiscourseAPI {
         return siteInfo.customEmoji ?? []
     }
 
+    func search(term: String, page: Int = 0) async throws -> DiscourseSearchResult {
+        try await request(route: .search(term: term, page: page))
+    }
+
+    func fetchTags() async throws -> DiscourseTagList {
+        try await request(route: .tags)
+    }
+
+    func searchTags(query: String = "", categoryId: Int? = nil) async throws -> [DiscourseTag] {
+        struct TagSearchResponse: Decodable {
+            let results: [TagSearchItem]
+            struct TagSearchItem: Decodable {
+                let name: String
+                let count: Int?
+            }
+        }
+        let response: TagSearchResponse = try await request(route: .tagSearch(query: query, categoryId: categoryId))
+        return response.results.map { DiscourseTag(text: $0.name, count: $0.count ?? 0) }
+    }
+
+    func createBookmark(postId: Int) async throws -> DiscourseCreateBookmarkResponse {
+        try await request(route: .createBookmark, parameters: [
+            "bookmarkable_id": postId,
+            "bookmarkable_type": "Post",
+        ])
+    }
+
+    func deleteBookmark(id: Int) async throws {
+        let route = DiscourseRouter.deleteBookmark(id: id)
+        let url = baseURL + route.path
+        let response = await session.request(url, method: route.method).serializingData().response
+        if let statusCode = response.response?.statusCode, !(200 ..< 300).contains(statusCode) {
+            throw DiscourseAPIError(messages: ["Failed to delete bookmark"], errorType: nil)
+        }
+    }
+
+    func fetchBookmarks(username: String) async throws -> DiscourseBookmarkList {
+        try await request(route: .bookmarks(username: username))
+    }
+
+    func fetchUserSummary(username: String) async throws -> DiscourseUserSummary {
+        let response: DiscourseUserSummaryResponse = try await request(route: .userSummary(username: username))
+        return response.userSummary
+    }
+
+    func fetchUserProfile(username: String) async throws -> DiscourseUserProfile {
+        let response: DiscourseUserProfileResponse = try await request(route: .userProfile(username: username))
+        return response.user
+    }
+
     func loadOrFetchEmojiMap() async {
         if let cached = EmojiStore.load(for: baseURL) {
             emojiURLMap = cached
@@ -126,12 +176,25 @@ final class DiscourseAPI {
             .serializingDecodable(T.self)
             .response
 
+        #if DEBUG
+        if let data = response.data, let body = String(data: data, encoding: .utf8) {
+            print("[DiscourseAPI] \(route.method.rawValue) \(url)\n\(body)")
+        }
+        #endif
+
         if let statusCode = response.response?.statusCode, !(200 ..< 300).contains(statusCode),
-           let data = response.data,
-           let errBody = try? JSONDecoder().decode(DiscourseErrorResponse.self, from: data),
-           !errBody.errors.isEmpty
+           let data = response.data
         {
-            throw DiscourseAPIError(messages: errBody.errors)
+            if let errBody = try? JSONDecoder().decode(DiscourseErrorResponse.self, from: data),
+               !errBody.errors.isEmpty
+            {
+                throw DiscourseAPIError(messages: errBody.errors, errorType: errBody.errorType)
+            }
+            if let failBody = try? JSONDecoder().decode(DiscourseFailedResponse.self, from: data),
+               let message = failBody.message
+            {
+                throw DiscourseAPIError(messages: [message], errorType: failBody.failed)
+            }
         }
 
         return try response.result.get()
@@ -142,10 +205,27 @@ final class DiscourseAPI {
 
 private struct DiscourseErrorResponse: Decodable {
     let errors: [String]
+    let errorType: String?
+
+    enum CodingKeys: String, CodingKey {
+        case errors
+        case errorType = "error_type"
+    }
+}
+
+private struct DiscourseFailedResponse: Decodable {
+    let failed: String?
+    let message: String?
 }
 
 struct DiscourseAPIError: LocalizedError {
     let messages: [String]
+    let errorType: String?
+
+    var isNotLoggedIn: Bool {
+        errorType == "not_logged_in"
+    }
+
     var errorDescription: String? {
         messages.joined(separator: "\n")
     }

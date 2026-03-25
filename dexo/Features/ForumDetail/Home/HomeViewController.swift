@@ -59,6 +59,26 @@ final class HomeViewController: ObservableViewController {
         return spinner
     }()
 
+    private let errorLabel: UILabel = {
+        let label = UILabel()
+        label.textColor = .secondaryLabel
+        label.textAlignment = .center
+        label.numberOfLines = 0
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.isHidden = true
+        return label
+    }()
+
+    private let loginButton: UIButton = {
+        var config = UIButton.Configuration.filled()
+        config.title = String(localized: "home.login_prompt")
+        config.cornerStyle = .medium
+        let button = UIButton(configuration: config)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.isHidden = true
+        return button
+    }()
+
     private lazy var refreshControl: UIRefreshControl = {
         let rc = UIRefreshControl()
         rc.addTarget(self, action: #selector(pullToRefresh), for: .valueChanged)
@@ -88,6 +108,8 @@ final class HomeViewController: ObservableViewController {
         view.addSubview(segmentedControl)
         view.addSubview(tableView)
         view.addSubview(activityIndicator)
+        view.addSubview(errorLabel)
+        view.addSubview(loginButton)
 
         NSLayoutConstraint.activate([
             segmentedControl.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
@@ -101,9 +123,18 @@ final class HomeViewController: ObservableViewController {
 
             activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             activityIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+
+            errorLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            errorLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            errorLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
+            errorLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -32),
+
+            loginButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            loginButton.topAnchor.constraint(equalTo: errorLabel.bottomAnchor, constant: 16),
         ])
 
         segmentedControl.addTarget(self, action: #selector(segmentChanged), for: .valueChanged)
+        loginButton.addTarget(self, action: #selector(loginTapped), for: .touchUpInside)
 
         Task {
             await viewModel.loadTopics()
@@ -111,6 +142,29 @@ final class HomeViewController: ObservableViewController {
     }
 
     override func updateUI() {
+        // Login-required state
+        if viewModel.requiresLogin {
+            errorLabel.text = viewModel.errorMessage
+            errorLabel.isHidden = false
+            loginButton.isHidden = false
+            tableView.isHidden = true
+            segmentedControl.isHidden = true
+            activityIndicator.stopAnimating()
+            return
+        }
+
+        loginButton.isHidden = true
+        tableView.isHidden = false
+        segmentedControl.isHidden = false
+
+        // Show non-login errors (e.g. rate limit) when topic list is empty
+        if let error = viewModel.errorMessage, viewModel.topics.isEmpty {
+            errorLabel.text = error
+            errorLabel.isHidden = false
+        } else {
+            errorLabel.isHidden = true
+        }
+
         var snapshot = NSDiffableDataSourceSnapshot<Int, Int>()
         snapshot.appendSections([0])
         var seen = Set<Int>()
@@ -145,6 +199,15 @@ final class HomeViewController: ObservableViewController {
         Task {
             await viewModel.loadTopics()
             refreshControl.endRefreshing()
+        }
+    }
+
+    @objc private func loginTapped() {
+        authGate?.requireAuth { [weak self] in
+            guard let self else { return }
+            Task {
+                await self.viewModel.loadTopics()
+            }
         }
     }
 

@@ -1,5 +1,5 @@
-import Foundation
 import Alamofire
+import Foundation
 
 enum DiscourseRouter {
     case latestTopics(page: Int)
@@ -17,11 +17,21 @@ enum DiscourseRouter {
     case basicInfo
     case currentUser
     case emojis
+    case search(term: String, page: Int)
+    case tags
+    case tagSearch(query: String, categoryId: Int?)
+    case bookmarks(username: String)
+    case userSummary(username: String)
+    case userProfile(username: String)
+    case createBookmark
+    case deleteBookmark(id: Int)
 
     var method: HTTPMethod {
         switch self {
-        case .createTopic:
+        case .createTopic, .createBookmark:
             return .post
+        case .deleteBookmark:
+            return .delete
         default:
             return .get
         }
@@ -60,6 +70,29 @@ enum DiscourseRouter {
             return "/session/current.json"
         case .emojis:
             return "/emojis.json"
+        case .search(let term, let page):
+            let encoded = term.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? term
+            return "/search.json?q=\(encoded)&page=\(page)"
+        case .tags:
+            return "/tags.json"
+        case .tagSearch(let query, let categoryId):
+            let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+            var path = "/tags/filter/search?q=\(encoded)&limit=5"
+//            if let categoryId {
+//                path += "&categoryId=\(categoryId)"
+//            }
+            return path
+        case .bookmarks(let username):
+            return "/u/\(username)/bookmarks.json"
+        case .userSummary(let username):
+            return "/u/\(username)/summary.json"
+        case .userProfile(let username):
+            return "/u/\(username).json"
+        case .createBookmark:
+            return "/bookmarks.json"
+        case .deleteBookmark(let id):
+            return "/bookmarks/\(id).json"
         }
     }
 }
+

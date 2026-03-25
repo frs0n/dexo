@@ -2,6 +2,20 @@ import Foundation
 
 struct DiscourseNotificationList: Decodable {
     let notifications: [DiscourseNotification]
+    let loadMoreNotifications: String
+
+    var username: String? {
+        guard let url = URLComponents(string: loadMoreNotifications),
+              let item = url.queryItems?.first(where: { $0.name == "username" })
+        else {
+            return nil
+        }
+        return item.value
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case notifications, loadMoreNotifications = "load_more_notifications"
+    }
 }
 
 struct DiscourseNotification: Decodable, Identifiable {

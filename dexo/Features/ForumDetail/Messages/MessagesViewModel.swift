@@ -5,6 +5,7 @@ final class MessagesViewModel {
     var messages: [DiscourseTopicList.Topic] = []
     var isLoading = false
     var errorMessage: String?
+    var requiresLogin = false
 
     private let api: DiscourseAPI
 
@@ -15,10 +16,14 @@ final class MessagesViewModel {
     func loadMessages(username: String) async {
         isLoading = true
         errorMessage = nil
+        requiresLogin = false
         do {
             let result = try await api.fetchPrivateMessages(username: username)
             messages = result.topicList.topics
         } catch {
+            if let apiError = error as? DiscourseAPIError, apiError.isNotLoggedIn {
+                requiresLogin = true
+            }
             errorMessage = error.localizedDescription
         }
         isLoading = false

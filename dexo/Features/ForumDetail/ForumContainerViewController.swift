@@ -61,21 +61,19 @@ final class ForumContainerViewController: UIViewController, AuthGating {
     }
 
     private func configureNavItems() {
-        guard let tabBarVC = children.first as? ForumTabBarController,
-              let viewControllers = tabBarVC.viewControllers else { return }
+        guard let tabBarVC = children.first as? ForumTabBarController else { return }
 
         let titles = [
             String(localized: "tab.home"),
-            String(localized: "tab.categories"),
-            String(localized: "tab.notifications"),
-            String(localized: "tab.messages"),
+            String(localized: "tab.me"),
         ]
 
-        for (i, navVC) in viewControllers.enumerated() {
-            guard let nav = navVC as? UINavigationController,
-                  let rootVC = nav.viewControllers.first else { continue }
-            rootVC.title = titles[i]
-            rootVC.navigationItem.rightBarButtonItems = [
+        for (i, nav) in tabBarVC.navigationControllers.enumerated() {
+            guard let rootVC = nav.viewControllers.first else { continue }
+            if i < titles.count {
+                rootVC.title = titles[i]
+            }
+            var rightItems = [
                 UIBarButtonItem(
                     image: UIImage(systemName: "xmark"),
                     style: .plain,
@@ -89,6 +87,20 @@ final class ForumContainerViewController: UIViewController, AuthGating {
                     action: #selector(menuButtonTapped)
                 ),
             ]
+
+            // On iOS 17, add search button to Home tab (iOS 18+ uses UISearchTab)
+            if #unavailable(iOS 18.0), i == 0 {
+                rightItems.append(
+                    UIBarButtonItem(
+                        image: UIImage(systemName: "magnifyingglass"),
+                        style: .plain,
+                        target: self,
+                        action: #selector(searchButtonTapped)
+                    )
+                )
+            }
+
+            rootVC.navigationItem.rightBarButtonItems = rightItems
         }
     }
 
@@ -116,7 +128,13 @@ final class ForumContainerViewController: UIViewController, AuthGating {
     }
 
     @objc private func dismissButtonTapped() {
-        dismiss(animated: true)
+        ForumOverlayManager.shared.minimize()
+    }
+
+    @objc private func searchButtonTapped() {
+        let searchVC = SearchViewController(api: api)
+        let searchNav = UINavigationController(rootViewController: searchVC)
+        present(searchNav, animated: true)
     }
 
     // MARK: - Auth Actions
@@ -143,7 +161,7 @@ final class ForumContainerViewController: UIViewController, AuthGating {
         }
     }
 
-    private func performLogout() {
+    func performLogout() {
         authManager.logout(forum: forum)
         // Refresh forum from DB
         if let forums = try? DatabaseManager.shared.fetchAllForums(),

@@ -7,6 +7,7 @@ protocol PostCellDelegate: AnyObject {
     func postCell(didTapShowRepliesForPostId postId: Int)
     func postCell(didTapToggleDetails detailsIndex: Int, postId: Int)
     func postCell(didTapReplyToPost post: DiscourseTopicDetail.Post)
+    func postCell(didToggleBookmarkForPost post: DiscourseTopicDetail.Post, isBookmarked: Bool)
 }
 
 final class PostWebViewCell: UITableViewCell {

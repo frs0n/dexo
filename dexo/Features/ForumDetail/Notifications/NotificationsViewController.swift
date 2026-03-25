@@ -48,30 +48,15 @@ final class NotificationsViewController: ObservableViewController {
         ])
 
         loginButton.addTarget(self, action: #selector(loginTapped), for: .touchUpInside)
-    }
 
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        refreshForAuthState()
-    }
-
-    private func refreshForAuthState() {
-        if authGate?.isAuthenticated() == true {
-            placeholderLabel.text = String(localized: "notifications.loading")
-            loginButton.isHidden = true
-            Task {
-                await viewModel.loadNotifications()
-            }
-        } else {
-            placeholderLabel.text = String(localized: "notifications.title")
-            loginButton.isHidden = false
-            viewModel.notifications = []
+        Task {
+            await viewModel.loadNotifications()
         }
     }
 
     override func updateUI() {
-        if authGate?.isAuthenticated() != true {
-            placeholderLabel.text = String(localized: "notifications.title")
+        if viewModel.requiresLogin {
+            placeholderLabel.text = viewModel.errorMessage
             loginButton.isHidden = false
             return
         }
@@ -86,7 +71,10 @@ final class NotificationsViewController: ObservableViewController {
 
     @objc private func loginTapped() {
         authGate?.requireAuth { [weak self] in
-            self?.refreshForAuthState()
+            guard let self else { return }
+            Task {
+                await self.viewModel.loadNotifications()
+            }
         }
     }
 }

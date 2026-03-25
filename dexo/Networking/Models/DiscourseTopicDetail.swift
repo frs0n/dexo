@@ -54,6 +54,7 @@ struct DiscourseTopicDetail: Decodable {
         let flairUrl: String?
         let flairBgColor: String?
         let bookmarked: Bool
+        let bookmarkId: Int?
         let reactions: [Reaction]
         let reactionUsersCount: Int
 
@@ -70,6 +71,7 @@ struct DiscourseTopicDetail: Decodable {
             case flairUrl = "flair_url"
             case flairBgColor = "flair_bg_color"
             case bookmarked
+            case bookmarkId = "bookmark_id"
             case reactions
             case reactionUsersCount = "reaction_users_count"
         }
@@ -90,6 +92,7 @@ struct DiscourseTopicDetail: Decodable {
             flairUrl = try? container.decodeIfPresent(String.self, forKey: .flairUrl)
             flairBgColor = try? container.decodeIfPresent(String.self, forKey: .flairBgColor)
             bookmarked = (try? container.decodeIfPresent(Bool.self, forKey: .bookmarked)) ?? false
+            bookmarkId = try? container.decodeIfPresent(Int.self, forKey: .bookmarkId)
             reactions = (try? container.decodeIfPresent([Reaction].self, forKey: .reactions)) ?? []
             reactionUsersCount = (try? container.decodeIfPresent(Int.self, forKey: .reactionUsersCount)) ?? 0
         }

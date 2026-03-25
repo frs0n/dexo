@@ -170,6 +170,20 @@ extension RepliesViewController: PostCellDelegate {
         }
     }
 
+    func postCell(didToggleBookmarkForPost post: DiscourseTopicDetail.Post, isBookmarked: Bool) {
+        Task {
+            do {
+                if isBookmarked {
+                    _ = try await api.createBookmark(postId: post.id)
+                } else if let bookmarkId = post.bookmarkId {
+                    try await api.deleteBookmark(id: bookmarkId)
+                }
+            } catch {
+                // Optimistic UI — server state will reconcile on next refresh
+            }
+        }
+    }
+
     private func findAuthGating() -> AuthGating? {
         var vc: UIViewController? = self
         while let parent = vc?.parent {

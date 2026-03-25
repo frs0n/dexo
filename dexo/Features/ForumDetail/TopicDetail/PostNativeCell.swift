@@ -464,16 +464,20 @@ final class PostNativeCell: UITableViewCell {
     }
 
     @objc private func bookmarkButtonTapped() {
-        guard currentPost != nil else { return }
+        guard let post = currentPost else { return }
         let config = UIImage.SymbolConfiguration(pointSize: 11, weight: .medium)
         let isFilled = bookmarkButton.image(for: .normal) == UIImage(systemName: "bookmark.fill", withConfiguration: config)
+        let isBookmarked: Bool
         if isFilled {
             bookmarkButton.setImage(UIImage(systemName: "bookmark", withConfiguration: config), for: .normal)
             bookmarkButton.tintColor = .tertiaryLabel
+            isBookmarked = false
         } else {
             bookmarkButton.setImage(UIImage(systemName: "bookmark.fill", withConfiguration: config), for: .normal)
             bookmarkButton.tintColor = .systemYellow
+            isBookmarked = true
         }
+        delegate?.postCell(didToggleBookmarkForPost: post, isBookmarked: isBookmarked)
     }
 
     override func prepareForReuse() {

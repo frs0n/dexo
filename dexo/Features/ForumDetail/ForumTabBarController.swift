@@ -3,6 +3,7 @@ import UIKit
 final class ForumTabBarController: UITabBarController {
     private let api: DiscourseAPI
     private weak var authGate: AuthGating?
+    private(set) var navigationControllers: [UINavigationController] = []
 
     init(api: DiscourseAPI, authGate: AuthGating? = nil) {
         self.api = api
@@ -18,33 +19,27 @@ final class ForumTabBarController: UITabBarController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-//        let navBarAppearance = UINavigationBarAppearance()
-//        navBarAppearance.configureWithOpaqueBackground()
-
         let homeVC = HomeViewController(api: api, authGate: authGate)
         let homeNav = UINavigationController(rootViewController: homeVC)
-//        homeNav.navigationBar.standardAppearance = navBarAppearance
-//        homeNav.navigationBar.scrollEdgeAppearance = navBarAppearance
         homeNav.tabBarItem = UITabBarItem(title: String(localized: "tab.home"), image: UIImage(systemName: "house"), tag: 0)
 
-        let categoriesVC = CategoriesViewController(api: api)
-        let categoriesNav = UINavigationController(rootViewController: categoriesVC)
-//        categoriesNav.navigationBar.standardAppearance = navBarAppearance
-//        categoriesNav.navigationBar.scrollEdgeAppearance = navBarAppearance
-        categoriesNav.tabBarItem = UITabBarItem(title: String(localized: "tab.categories"), image: UIImage(systemName: "square.grid.2x2"), tag: 1)
+        let meVC = MeViewController(api: api, authGate: authGate)
+        let meNav = UINavigationController(rootViewController: meVC)
+        meNav.tabBarItem = UITabBarItem(title: String(localized: "tab.me"), image: UIImage(systemName: "person"), tag: 1)
 
-        let notificationsVC = NotificationsViewController(api: api, authGate: authGate)
-        let notificationsNav = UINavigationController(rootViewController: notificationsVC)
-//        notificationsNav.navigationBar.standardAppearance = navBarAppearance
-//        notificationsNav.navigationBar.scrollEdgeAppearance = navBarAppearance
-        notificationsNav.tabBarItem = UITabBarItem(title: String(localized: "tab.notifications"), image: UIImage(systemName: "bell"), tag: 2)
+        let searchVC = SearchViewController(api: api)
+        let searchNav = UINavigationController(rootViewController: searchVC)
+        searchNav.tabBarItem = UITabBarItem(title: String(localized: "search.title"), image: UIImage(systemName: "magnifyingglass"), tag: 2)
 
-        let messagesVC = MessagesViewController(api: api, authGate: authGate)
-        let messagesNav = UINavigationController(rootViewController: messagesVC)
-//        messagesNav.navigationBar.standardAppearance = navBarAppearance
-//        messagesNav.navigationBar.scrollEdgeAppearance = navBarAppearance
-        messagesNav.tabBarItem = UITabBarItem(title: NSLocalizedString("tab.messages", comment: ""), image: UIImage(systemName: "envelope"), tag: 3)
+        navigationControllers = [homeNav, meNav, searchNav]
 
-        viewControllers = [homeNav, categoriesNav, notificationsNav, messagesNav]
+        if #available(iOS 18.0, *) {
+            let homeTab = UITab(title: String(localized: "tab.home"), image: UIImage(systemName: "house"), identifier: "home") { _ in homeNav }
+            let meTab = UITab(title: String(localized: "tab.me"), image: UIImage(systemName: "person"), identifier: "me") { _ in meNav }
+            let searchTab = UISearchTab { _ in searchNav }
+            self.tabs = [homeTab, meTab, searchTab]
+        } else {
+            viewControllers = [homeNav, meNav, searchNav]
+        }
     }
 }

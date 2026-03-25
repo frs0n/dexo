@@ -21,7 +21,8 @@
       "Bash(tuist version:*)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(swift test:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(make generate:*)"
     ]
   }
 }

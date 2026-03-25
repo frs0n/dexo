@@ -1,0 +1,7 @@
+What to Test
+
+• Bookmark feature: Try adding and managing bookmarks
+• Profile center: Check that personal information displays correctly
+• Search: Test the new search functionality across the app
+• Floating forum: Try minimizing the forum view into a floating button and restoring it
+• Login prompt: Forums that require authentication will now show a login button first

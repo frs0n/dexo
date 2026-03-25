@@ -376,6 +376,20 @@ extension TopicDetailViewController: PostCellDelegate {
         // Details toggle not supported in native rendering — no-op
     }
 
+    func postCell(didToggleBookmarkForPost post: DiscourseTopicDetail.Post, isBookmarked: Bool) {
+        Task {
+            do {
+                if isBookmarked {
+                    _ = try await api.createBookmark(postId: post.id)
+                } else if let bookmarkId = post.bookmarkId {
+                    try await api.deleteBookmark(id: bookmarkId)
+                }
+            } catch {
+                // Optimistic UI — server state will reconcile on next refresh
+            }
+        }
+    }
+
     func postCell(didTapReplyToPost post: DiscourseTopicDetail.Post) {
         guard let authGate = findForumContainer() else { return }
         authGate.requireAuth { [weak self] in

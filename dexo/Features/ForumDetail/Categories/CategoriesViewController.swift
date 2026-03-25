@@ -3,6 +3,7 @@ import UIKit
 final class CategoriesViewController: ObservableViewController {
     private let api: DiscourseAPI
     private let viewModel: CategoriesViewModel
+    private weak var authGate: AuthGating?
 
     private lazy var tableView: UITableView = {
         let tv = UITableView(frame: .zero, style: .plain)
@@ -37,9 +38,30 @@ final class CategoriesViewController: ObservableViewController {
         return rc
     }()
 
-    init(api: DiscourseAPI) {
+    private let errorLabel: UILabel = {
+        let label = UILabel()
+        label.textColor = .secondaryLabel
+        label.textAlignment = .center
+        label.numberOfLines = 0
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.isHidden = true
+        return label
+    }()
+
+    private let loginButton: UIButton = {
+        var config = UIButton.Configuration.filled()
+        config.title = String(localized: "categories.login_prompt")
+        config.cornerStyle = .medium
+        let button = UIButton(configuration: config)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.isHidden = true
+        return button
+    }()
+
+    init(api: DiscourseAPI, authGate: AuthGating? = nil) {
         self.api = api
         self.viewModel = CategoriesViewModel(api: api)
+        self.authGate = authGate
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -55,6 +77,8 @@ final class CategoriesViewController: ObservableViewController {
 
         view.addSubview(tableView)
         view.addSubview(activityIndicator)
+        view.addSubview(errorLabel)
+        view.addSubview(loginButton)
 
         NSLayoutConstraint.activate([
             tableView.topAnchor.constraint(equalTo: view.topAnchor),
@@ -64,7 +88,17 @@ final class CategoriesViewController: ObservableViewController {
 
             activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             activityIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+
+            errorLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            errorLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            errorLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
+            errorLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -32),
+
+            loginButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            loginButton.topAnchor.constraint(equalTo: errorLabel.bottomAnchor, constant: 16),
         ])
+
+        loginButton.addTarget(self, action: #selector(loginTapped), for: .touchUpInside)
 
         Task {
             await viewModel.loadCategories()
@@ -72,6 +106,18 @@ final class CategoriesViewController: ObservableViewController {
     }
 
     override func updateUI() {
+        if viewModel.requiresLogin {
+            errorLabel.text = viewModel.errorMessage
+            errorLabel.isHidden = false
+            loginButton.isHidden = false
+            tableView.isHidden = true
+            activityIndicator.stopAnimating()
+            return
+        }
+
+        errorLabel.isHidden = true
+        loginButton.isHidden = true
+
         var snapshot = NSDiffableDataSourceSnapshot<Int, Int>()
         snapshot.appendSections([0])
         let ids = viewModel.categories.map(\.id)
@@ -91,6 +137,15 @@ final class CategoriesViewController: ObservableViewController {
         Task {
             await viewModel.loadCategories()
             refreshControl.endRefreshing()
+        }
+    }
+
+    @objc private func loginTapped() {
+        authGate?.requireAuth { [weak self] in
+            guard let self else { return }
+            Task {
+                await self.viewModel.loadCategories()
+            }
         }
     }
 }

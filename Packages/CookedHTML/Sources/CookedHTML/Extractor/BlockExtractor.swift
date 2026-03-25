@@ -141,8 +141,15 @@ enum BlockExtractor {
             if isBlockElement(element) {
                 return extract(from: element, options: options)
             }
-            // Wrap in paragraph if it has inline content
-            let inlines = InlineExtractor.extract(from: element, options: options)
+            // Inline spoiler at block level (e.g. <span class="spoiler"> wrapping block children in a <td>)
+            let classAttr = (try? element.attr("class")) ?? ""
+            if classAttr.contains("spoiler") {
+                let inner = extract(from: element, options: options)
+                if inner.isEmpty { return [] }
+                return [.spoiler(blocks: inner)]
+            }
+            // Inline element at block level — extract as inline node preserving tag semantics (bold, link, etc.)
+            let inlines = InlineExtractor.extractNode(element, options: options)
             if inlines.isEmpty { return [] }
             return [.paragraph(inlines)]
         }
@@ -262,6 +269,13 @@ enum BlockExtractor {
         // Video embed (youtube-onebox, lazy-video-container, etc.)
         if classAttr.contains("lazy-video-container") || classAttr.contains("video-container") {
             return extractVideo(from: element, options: options)
+        }
+
+        // Block-level spoiler: wrap all child blocks in a single .spoiler container
+        if classAttr.contains("spoiler") {
+            let inner = extract(from: element, options: options)
+            if inner.isEmpty { return [] }
+            return [.spoiler(blocks: inner)]
         }
 
         // Generic div — recurse into children

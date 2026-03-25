@@ -33,8 +33,9 @@ public enum ContentBlock: Sendable, Equatable {
     case onebox(sourceURL: String?, title: String?, description: String?, imageURL: String?, imageWidth: Int?, imageHeight: Int?, faviconURL: String? = nil)
     case video(url: String, thumbnailURL: String?, title: String?, width: Int?, height: Int?, videoId: String?, provider: String?)
     case list(ordered: Bool, items: [ListItem])
-    case table(headers: [[InlineNode]], rows: [[[InlineNode]]])
+    case table(headers: [[ContentBlock]], rows: [[[ContentBlock]]])
     case details(summary: [InlineNode], content: [ContentBlock])
+    case spoiler(blocks: [ContentBlock])
     case divider
     case rawHTML(String)
 }

@@ -4,6 +4,7 @@ import Foundation
 final class DiscourseAPI {
     let baseURL: String
     private let session: Session
+    private(set) var emojiURLMap: [String: String] = [:]
 
     init(forum: ForumInstance) {
         self.baseURL = forum.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -90,6 +91,24 @@ final class DiscourseAPI {
     func fetchCustomEmojis() async throws -> [DiscourseCustomEmoji] {
         let siteInfo: DiscourseSiteInfo = try await request(route: .siteInfo)
         return siteInfo.customEmoji ?? []
+    }
+
+    func loadOrFetchEmojiMap() async {
+        if let cached = EmojiStore.load(for: baseURL) {
+            emojiURLMap = cached
+            return
+        }
+        do {
+            let groups: [String: [DiscourseEmojiEntry]] = try await request(route: .emojis)
+            var map: [String: String] = [:]
+            for entries in groups.values {
+                for entry in entries { map[entry.name] = entry.url }
+            }
+            emojiURLMap = map
+            EmojiStore.save(map, for: baseURL)
+        } catch {
+            // Silent failure — reactions won't show emoji images but functionality is unaffected
+        }
     }
 
     func revokeApiKey(apiKey: String) async {

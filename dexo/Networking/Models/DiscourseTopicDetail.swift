@@ -33,6 +33,12 @@ struct DiscourseTopicDetail: Decodable {
         }
     }
 
+    struct Reaction: Decodable {
+        let id: String
+        let type: String
+        let count: Int
+    }
+
     struct Post: Decodable, Identifiable {
         let id: Int
         let username: String
@@ -44,6 +50,12 @@ struct DiscourseTopicDetail: Decodable {
         let replyToPostNumber: Int?
         let replyToUser: ReplyToUser?
         let actionCode: String?
+        let userTitle: String?
+        let flairUrl: String?
+        let flairBgColor: String?
+        let bookmarked: Bool
+        let reactions: [Reaction]
+        let reactionUsersCount: Int
 
         enum CodingKeys: String, CodingKey {
             case id, username, cooked
@@ -54,6 +66,12 @@ struct DiscourseTopicDetail: Decodable {
             case replyToPostNumber = "reply_to_post_number"
             case replyToUser = "reply_to_user"
             case actionCode = "action_code"
+            case userTitle = "user_title"
+            case flairUrl = "flair_url"
+            case flairBgColor = "flair_bg_color"
+            case bookmarked
+            case reactions
+            case reactionUsersCount = "reaction_users_count"
         }
 
         init(from decoder: Decoder) throws {
@@ -68,6 +86,12 @@ struct DiscourseTopicDetail: Decodable {
             replyToPostNumber = try? container.decodeIfPresent(Int.self, forKey: .replyToPostNumber)
             replyToUser = try? container.decodeIfPresent(ReplyToUser.self, forKey: .replyToUser)
             actionCode = try? container.decodeIfPresent(String.self, forKey: .actionCode)
+            userTitle = try? container.decodeIfPresent(String.self, forKey: .userTitle)
+            flairUrl = try? container.decodeIfPresent(String.self, forKey: .flairUrl)
+            flairBgColor = try? container.decodeIfPresent(String.self, forKey: .flairBgColor)
+            bookmarked = (try? container.decodeIfPresent(Bool.self, forKey: .bookmarked)) ?? false
+            reactions = (try? container.decodeIfPresent([Reaction].self, forKey: .reactions)) ?? []
+            reactionUsersCount = (try? container.decodeIfPresent(Int.self, forKey: .reactionUsersCount)) ?? 0
         }
     }
 }

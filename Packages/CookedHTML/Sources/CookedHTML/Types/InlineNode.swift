@@ -8,6 +8,10 @@ public enum InlineNode: Sendable, Equatable {
     case image(src: String, alt: String?, width: Int?, height: Int?, isEmoji: Bool)
     case code(String)
     case lineBreak
+    case mention(username: String, href: String)
+    case mentionGroup(name: String, href: String)
+    case hashtag(text: String, href: String, type: String?)
+    case spoiler(children: [InlineNode])
 }
 
 public extension [InlineNode] {

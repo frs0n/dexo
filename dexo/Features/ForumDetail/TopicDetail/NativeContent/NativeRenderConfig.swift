@@ -53,6 +53,7 @@ enum NativeContentRenderer {
         CodeBlockRenderer.self,
         DiscourseQuoteRenderer.self,
         DetailsRenderer.self,
+        SpoilerRenderer.self,
         OneboxRenderer.self,
         VideoRenderer.self,
         TableRenderer.self,

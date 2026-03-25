@@ -4,6 +4,8 @@ import UIKit
 /// Custom attribute key for image URLs that need async loading.
 public extension NSAttributedString.Key {
     static let cookedHTMLImageURL = NSAttributedString.Key("cookedHTMLImageURL")
+    static let cookedHTMLSpoiler = NSAttributedString.Key("cookedHTMLSpoiler")
+    static let cookedHTMLSpoilerOriginalColor = NSAttributedString.Key("cookedHTMLSpoilerOriginalColor")
 }
 
 /// Configuration for NSAttributedString rendering.
@@ -13,19 +15,28 @@ public struct AttributedStringConfig: Sendable {
     public let linkColor: UIColor
     public let codeFont: UIFont
     public let codeBackgroundColor: UIColor
+    public let mentionColor: UIColor
+    public let hashtagColor: UIColor
+    public let spoilerColor: UIColor
 
     public init(
         baseFont: UIFont = .systemFont(ofSize: 16),
         baseColor: UIColor = .label,
         linkColor: UIColor = .link,
         codeFont: UIFont = .monospacedSystemFont(ofSize: 15, weight: .regular),
-        codeBackgroundColor: UIColor = .secondarySystemBackground
+        codeBackgroundColor: UIColor = .secondarySystemBackground,
+        mentionColor: UIColor = .link,
+        hashtagColor: UIColor = .link,
+        spoilerColor: UIColor = .secondarySystemBackground
     ) {
         self.baseFont = baseFont
         self.baseColor = baseColor
         self.linkColor = linkColor
         self.codeFont = codeFont
         self.codeBackgroundColor = codeBackgroundColor
+        self.mentionColor = mentionColor
+        self.hashtagColor = hashtagColor
+        self.spoilerColor = spoilerColor
     }
 }
 
@@ -113,6 +124,39 @@ public extension InlineNode {
 
         case .lineBreak:
             return NSAttributedString(string: "\n")
+
+        case .mention(let username, let href):
+            return NSAttributedString(string: "@\(username)", attributes: [
+                .font: config.baseFont,
+                .foregroundColor: config.mentionColor,
+                .link: href,
+            ])
+
+        case .mentionGroup(let name, let href):
+            return NSAttributedString(string: "@\(name)", attributes: [
+                .font: config.baseFont,
+                .foregroundColor: config.mentionColor,
+                .link: href,
+            ])
+
+        case .hashtag(let text, let href, _):
+            return NSAttributedString(string: "#\(text)", attributes: [
+                .font: config.baseFont,
+                .foregroundColor: config.hashtagColor,
+                .link: href,
+            ])
+
+        case .spoiler(let children):
+            let result = NSMutableAttributedString()
+            for child in children {
+                result.append(child.attributedString(config: config))
+            }
+            let range = NSRange(location: 0, length: result.length)
+            // Mark as spoiler — the view layer handles the visual blur
+            result.addAttribute(.cookedHTMLSpoiler, value: true, range: range)
+            // Remove links so they aren't tappable while hidden
+            result.removeAttribute(.link, range: range)
+            return result
         }
     }
 }

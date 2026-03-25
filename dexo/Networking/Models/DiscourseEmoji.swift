@@ -5,6 +5,11 @@ struct DiscourseCustomEmoji: Decodable {
     let url: String
 }
 
+struct DiscourseEmojiEntry: Decodable {
+    let name: String
+    let url: String
+}
+
 struct DiscourseCreatePostResponse: Decodable {
     let id: Int
     let postNumber: Int

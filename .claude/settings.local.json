@@ -19,7 +19,9 @@
       "Bash(swift build)",
       "Bash(ls:*)",
       "Bash(tuist version:*)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(swift test:*)",
+      "Bash(grep:*)"
     ]
   }
 }

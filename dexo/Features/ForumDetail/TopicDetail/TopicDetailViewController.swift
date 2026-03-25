@@ -43,7 +43,8 @@ final class TopicDetailViewController: ObservableViewController {
             postLink: postLink,
             baseURL: self.baseURL,
             hasUnsupportedBlocks: hasUnsupported,
-            cookedHTML: post.cooked
+            cookedHTML: post.cooked,
+            emojiURLMap: self.api.emojiURLMap
         )
         return cell
     }
@@ -153,6 +154,9 @@ final class TopicDetailViewController: ObservableViewController {
 
         Task {
             await viewModel.loadTopic(id: topicId, containerWidth: view.bounds.width)
+        }
+        Task {
+            await api.loadOrFetchEmojiMap()
         }
     }
 

@@ -16,6 +16,7 @@ enum DiscourseRouter {
     case siteInfo
     case basicInfo
     case currentUser
+    case emojis
 
     var method: HTTPMethod {
         switch self {
@@ -57,6 +58,8 @@ enum DiscourseRouter {
             return "/site/basic-info.json"
         case .currentUser:
             return "/session/current.json"
+        case .emojis:
+            return "/emojis.json"
         }
     }
 }

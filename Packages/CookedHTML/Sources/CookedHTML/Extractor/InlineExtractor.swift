@@ -13,7 +13,7 @@ enum InlineExtractor {
     }
 
     /// Extract inline nodes from a single DOM node.
-    private static func extractNode(_ node: Node, options: ParseOptions, style: TextStyle) -> [InlineNode] {
+    static func extractNode(_ node: Node, options: ParseOptions, style: TextStyle = []) -> [InlineNode] {
         if let textNode = node as? TextNode {
             let text = textNode.getWholeText()
             if text.allSatisfy({ $0.isWhitespace }) && text.contains("\n") {
@@ -42,6 +42,24 @@ enum InlineExtractor {
 
         case "a":
             let href = resolveURL((try? element.attr("href")) ?? "", options: options)
+            let classAttr = (try? element.attr("class")) ?? ""
+            if classAttr.contains("mention-group") {
+                let text = (try? element.text()) ?? ""
+                let name = text.hasPrefix("@") ? String(text.dropFirst()) : text
+                return [.mentionGroup(name: name, href: href)]
+            }
+            if classAttr.contains("mention") {
+                let text = (try? element.text()) ?? ""
+                let username = text.hasPrefix("@") ? String(text.dropFirst()) : text
+                return [.mention(username: username, href: href)]
+            }
+            if classAttr.contains("hashtag-cooked") || classAttr.contains("hashtag") {
+                let text = (try? element.text()) ?? ""
+                let displayText = text.hasPrefix("#") ? String(text.dropFirst()) : text
+                let dataType = try? element.attr("data-type")
+                let type = (dataType?.isEmpty == false) ? dataType : nil
+                return [.hashtag(text: displayText, href: href, type: type)]
+            }
             let children = extract(from: element, options: options, style: style)
             return [.link(href: href, children: children)]
 
@@ -56,6 +74,11 @@ enum InlineExtractor {
             return [.lineBreak]
 
         case "span":
+            let classAttr = (try? element.attr("class")) ?? ""
+            if classAttr.contains("spoiler") {
+                let children = extract(from: element, options: options, style: style)
+                return [.spoiler(children: children)]
+            }
             return extract(from: element, options: options, style: style)
 
         case "div":

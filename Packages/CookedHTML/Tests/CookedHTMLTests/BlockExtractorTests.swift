@@ -148,6 +148,75 @@ final class BlockExtractorTests: XCTestCase {
         XCTAssertEqual(blocks.count, 1)
     }
 
+    // MARK: - Spoiler
+
+    func testBlockSpoiler() {
+        let html = """
+        <div class="spoiler">
+        <p>此文本将被模糊处理</p>
+        </div>
+        """
+        let blocks = CookedHTMLParser.parse(html: html)
+        XCTAssertEqual(blocks.count, 1)
+        if case .spoiler(let inner) = blocks[0] {
+            XCTAssertEqual(inner.count, 1)
+            if case .paragraph(let inlines) = inner[0] {
+                XCTAssertEqual(inlines, [.text("此文本将被模糊处理")])
+            } else {
+                XCTFail("Expected paragraph inside spoiler, got \(inner[0])")
+            }
+        } else {
+            XCTFail("Expected .spoiler block, got \(blocks[0])")
+        }
+    }
+
+    func testBlockSpoilerWithMultipleChildren() {
+        let html = """
+        <div class="spoiler">
+        <p>First hidden paragraph</p>
+        <p>Second hidden paragraph</p>
+        </div>
+        """
+        let blocks = CookedHTMLParser.parse(html: html)
+        XCTAssertEqual(blocks.count, 1)
+        if case .spoiler(let inner) = blocks[0] {
+            XCTAssertEqual(inner.count, 2)
+            for block in inner {
+                if case .paragraph = block {
+                    // OK
+                } else {
+                    XCTFail("Expected paragraph, got \(block)")
+                }
+            }
+        } else {
+            XCTFail("Expected .spoiler block, got \(blocks[0])")
+        }
+    }
+
+    func testBlockSpoilerWithList() {
+        let html = """
+        <div class="spoiler">
+        <ol>
+        <li>First item</li>
+        <li>Second item</li>
+        </ol>
+        </div>
+        """
+        let blocks = CookedHTMLParser.parse(html: html)
+        XCTAssertEqual(blocks.count, 1)
+        if case .spoiler(let inner) = blocks[0] {
+            XCTAssertEqual(inner.count, 1)
+            if case .list(let ordered, let items) = inner[0] {
+                XCTAssertTrue(ordered)
+                XCTAssertEqual(items.count, 2)
+            } else {
+                XCTFail("Expected list inside spoiler, got \(inner[0])")
+            }
+        } else {
+            XCTFail("Expected .spoiler block, got \(blocks[0])")
+        }
+    }
+
     // MARK: - Lightbox + inline text
 
     func testLightboxFollowedByTextAndEmoji() {

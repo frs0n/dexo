@@ -20,61 +20,27 @@ enum TableRenderer: BlockRenderer {
         let cellPaddingH: CGFloat = 12
         let separatorColor = UIColor.separator
 
-        // MARK: - Measure natural column widths
+        // MARK: - Build grid and measure natural column widths
 
-        func makeAttrString(for inlines: [InlineNode], bold: Bool) -> NSAttributedString {
-            if bold {
-                let boldConfig = AttributedStringConfig(
-                    baseFont: config.baseFont.withTraits(.traitBold),
-                    baseColor: config.baseColor,
-                    linkColor: config.linkColor,
-                    codeFont: config.codeFont,
-                    codeBackgroundColor: config.codeBackgroundColor
-                )
-                return inlines.attributedString(config: boldConfig)
-            } else {
-                return inlines.attributedString(config: config.attributedStringConfig)
-            }
-        }
-
-        // Build attributed strings, inline nodes, and measure natural widths per column
-        var attrGrid: [[NSAttributedString]] = []
-        var inlinesGrid: [[[InlineNode]]] = []
-        var columnMaxWidths: [CGFloat] = Array(repeating: 0, count: columnCount)
-
-        func appendRow(cells: [[InlineNode]], bold: Bool) {
-            var attrRow: [NSAttributedString] = []
-            var inlinesRow: [[InlineNode]] = []
-            for col in 0..<columnCount {
-                let inlines = col < cells.count ? cells[col] : []
-                let attr = makeAttrString(for: inlines, bold: bold)
-                let imageInfo = findPrimaryImage(in: inlines)
-
-                let naturalWidth: CGFloat
-                if let img = imageInfo, let w = img.width, w > 0 {
-                    naturalWidth = CGFloat(w) + cellPaddingH * 2
-                } else {
-                    let textWidth = ceil(attr.boundingRect(
-                        with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude),
-                        options: [.usesLineFragmentOrigin],
-                        context: nil
-                    ).width)
-                    naturalWidth = textWidth + cellPaddingH * 2
-                }
-
-                columnMaxWidths[col] = max(columnMaxWidths[col], naturalWidth)
-                attrRow.append(attr)
-                inlinesRow.append(inlines)
-            }
-            attrGrid.append(attrRow)
-            inlinesGrid.append(inlinesRow)
-        }
-
+        // All rows (headers first, then data) as [[ContentBlock]]
+        var allRows: [[[ContentBlock]]] = []
+        var isHeaderRow: [Bool] = []
         if !headers.isEmpty {
-            appendRow(cells: headers, bold: true)
+            allRows.append(headers)
+            isHeaderRow.append(true)
         }
         for row in rows {
-            appendRow(cells: row, bold: false)
+            allRows.append(row)
+            isHeaderRow.append(false)
+        }
+
+        var columnMaxWidths: [CGFloat] = Array(repeating: 0, count: columnCount)
+        for row in allRows {
+            for col in 0..<columnCount {
+                let cellBlocks = col < row.count ? row[col] : []
+                let naturalWidth = estimateNaturalWidth(of: cellBlocks, config: config) + cellPaddingH * 2
+                columnMaxWidths[col] = max(columnMaxWidths[col], naturalWidth)
+            }
         }
 
         // MARK: - Water-filling column width allocation
@@ -110,80 +76,50 @@ enum TableRenderer: BlockRenderer {
             }
         }
 
-        // Convert to multipliers; last column has no multiplier — it fills remaining space.
+        // Convert to multipliers; last column fills remaining space.
         let totalAssigned = columnWidths.reduce(0, +)
         let ratios: [CGFloat] = columnWidths.map {
             totalAssigned > 0 ? $0 / totalAssigned : 1 / CGFloat(columnCount)
         }
 
-        // Compute actual column widths in points for image sizing
         let columnWidthsPx = ratios.map { $0 * availableWidth }
 
-        // MARK: - Cell factories
+        // MARK: - Cell factory
 
-        func makeTextCell(attr: NSAttributedString) -> UIView {
+        func makeCellView(blocks: [ContentBlock], columnWidth: CGFloat, bold: Bool) -> UIView {
             let container = UIView()
             container.translatesAutoresizingMaskIntoConstraints = false
-
-            let textView = LinkTextView()
-            textView.isEditable = false
-            textView.isScrollEnabled = false
-            textView.textContainerInset = .zero
-            textView.textContainer.lineFragmentPadding = 0
-            textView.backgroundColor = .clear
-            textView.dataDetectorTypes = []
-            textView.linkTextAttributes = [.foregroundColor: config.linkColor]
-            textView.attributedText = attr
-            textView.translatesAutoresizingMaskIntoConstraints = false
-
-            container.addSubview(textView)
-            NSLayoutConstraint.activate([
-                textView.topAnchor.constraint(equalTo: container.topAnchor, constant: cellPaddingV),
-                textView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: cellPaddingH),
-                textView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -cellPaddingH),
-                textView.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -cellPaddingV),
-            ])
-
-            return container
-        }
-
-        func makeImageCell(imageInfo: CellImageInfo, columnWidth: CGFloat) -> UIView {
-            let container = UIView()
-            container.translatesAutoresizingMaskIntoConstraints = false
-
-            guard let url = URL(string: imageInfo.src) else { return container }
 
             let innerWidth = columnWidth - cellPaddingH * 2
-            let hrefURL = imageInfo.href.flatMap { URL(string: $0) }
+            let cellConfig = NativeRenderConfig(
+                baseFont: bold ? config.baseFont.withTraits(.traitBold) : config.baseFont,
+                baseColor: config.baseColor,
+                linkColor: config.linkColor,
+                codeFont: config.codeFont,
+                codeBackgroundColor: config.codeBackgroundColor,
+                contentWidth: innerWidth,
+                baseURL: config.baseURL
+            )
 
-            // Scale dimensions so the image fills the cell width.
-            // TappableImageContainer uses a 690px reference width, so we scale
-            // the original dimensions to match that reference.
-            let scaledWidth: Int?
-            let scaledHeight: Int?
-            if let w = imageInfo.width, let h = imageInfo.height, w > 0 {
-                scaledWidth = 690
-                scaledHeight = Int(690.0 * CGFloat(h) / CGFloat(w))
-            } else {
-                scaledWidth = nil
-                scaledHeight = nil
+            // Rescale images to fill cell width (TappableImageContainer uses 690px reference)
+            let scaledBlocks = Self.scaleImagesForCell(blocks)
+
+            let stack = UIStackView()
+            stack.axis = .vertical
+            stack.spacing = 4
+            stack.translatesAutoresizingMaskIntoConstraints = false
+
+            let views = NativeContentRenderer.renderBlocks(scaledBlocks, config: cellConfig, delegate: delegate)
+            for view in views {
+                stack.addArrangedSubview(view)
             }
 
-            let imageContainer = TappableImageContainer(
-                url: url,
-                width: scaledWidth,
-                height: scaledHeight,
-                containerWidth: innerWidth,
-                href: hrefURL
-            )
-            imageContainer.delegate = delegate
-
-            container.addSubview(imageContainer)
+            container.addSubview(stack)
             NSLayoutConstraint.activate([
-                imageContainer.topAnchor.constraint(equalTo: container.topAnchor, constant: cellPaddingV),
-                imageContainer.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: cellPaddingH),
-                imageContainer.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -cellPaddingH),
-                imageContainer.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -cellPaddingV),
+                stack.topAnchor.constraint(equalTo: container.topAnchor, constant: cellPaddingV),
+                stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: cellPaddingH),
+                stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -cellPaddingH),
+                stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -cellPaddingV),
             ])
 
             return container
@@ -204,19 +140,14 @@ enum TableRenderer: BlockRenderer {
         tableStack.spacing = 0
         tableStack.translatesAutoresizingMaskIntoConstraints = false
 
-        for (rowIndex, attrRow) in attrGrid.enumerated() {
-            let inlinesRow = inlinesGrid[rowIndex]
+        for (rowIndex, row) in allRows.enumerated() {
+            let bold = isHeaderRow[rowIndex]
 
-            let cells: [UIView] = (0..<attrRow.count).map { col in
-                let inlines = inlinesRow[col]
-                if let imageInfo = findPrimaryImage(in: inlines) {
-                    return makeImageCell(imageInfo: imageInfo, columnWidth: columnWidthsPx[col])
-                } else {
-                    return makeTextCell(attr: attrRow[col])
-                }
+            let cells: [UIView] = (0..<columnCount).map { col in
+                let cellBlocks = col < row.count ? row[col] : []
+                return makeCellView(blocks: cellBlocks, columnWidth: columnWidthsPx[col], bold: bold)
             }
 
-            // Use plain UIView instead of UIStackView to avoid constraint conflicts
             let rowView = UIView()
             rowView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -233,21 +164,19 @@ enum TableRenderer: BlockRenderer {
                 }
 
                 if col < columnCount - 1 {
-                    // Fixed ratio for all columns except the last
                     cell.widthAnchor.constraint(equalTo: rowView.widthAnchor, multiplier: ratios[col]).isActive = true
                 } else {
-                    // Last column fills remaining space — no floating-point sum mismatch
                     cell.trailingAnchor.constraint(equalTo: rowView.trailingAnchor).isActive = true
                 }
             }
 
-            if rowIndex == 0 && !headers.isEmpty {
+            if bold {
                 rowView.backgroundColor = .secondarySystemBackground
             }
 
             tableStack.addArrangedSubview(rowView)
 
-            if rowIndex < attrGrid.count - 1 {
+            if rowIndex < allRows.count - 1 {
                 tableStack.addArrangedSubview(makeSeparator())
             }
         }
@@ -272,32 +201,72 @@ enum TableRenderer: BlockRenderer {
         return borderedContainer
     }
 
-    // MARK: - Image Detection
+    // MARK: - Image Scaling
 
-    private struct CellImageInfo {
-        let src: String
-        let width: Int?
-        let height: Int?
-        let href: String?
-    }
-
-    /// Find a non-emoji image in a cell's inline nodes.
-    private static func findPrimaryImage(in nodes: [InlineNode]) -> CellImageInfo? {
-        for node in nodes {
-            switch node {
-            case .image(let src, _, let w, let h, let isEmoji):
-                if !isEmoji && ((w ?? 0) > 80 || (h ?? 0) > 80) {
-                    return CellImageInfo(src: src, width: w, height: h, href: nil)
+    /// Rescale image dimensions to 690px reference width so TappableImageContainer
+    /// renders them at full cell width. Recurses into spoiler/blockquote containers.
+    private static func scaleImagesForCell(_ blocks: [ContentBlock]) -> [ContentBlock] {
+        blocks.map { block in
+            switch block {
+            case .image(let src, let alt, let w, let h, let href):
+                if let w, let h, w > 0 {
+                    let scaled = Int(690.0 * CGFloat(h) / CGFloat(w))
+                    return .image(src: src, alt: alt, width: 690, height: scaled, href: href)
                 }
-            case .link(let href, let children):
-                if let img = findPrimaryImage(in: children) {
-                    return CellImageInfo(src: img.src, width: img.width, height: img.height, href: href)
-                }
+                return block
+            case .spoiler(let inner):
+                return .spoiler(blocks: scaleImagesForCell(inner))
+            case .blockquote(let inner):
+                return .blockquote(blocks: scaleImagesForCell(inner))
+            case .details(let summary, let inner):
+                return .details(summary: summary, content: scaleImagesForCell(inner))
             default:
-                continue
+                return block
             }
         }
-        return nil
+    }
+
+    // MARK: - Width Estimation
+
+    /// Recursively estimate natural content width from blocks (for column sizing).
+    private static func estimateNaturalWidth(of blocks: [ContentBlock], config: NativeRenderConfig) -> CGFloat {
+        var maxWidth: CGFloat = 0
+        for block in blocks {
+            let width: CGFloat
+            switch block {
+            case .paragraph(let inlines):
+                let attr = inlines.attributedString(config: config.attributedStringConfig)
+                width = ceil(attr.boundingRect(
+                    with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin],
+                    context: nil
+                ).width)
+            case .heading(_, let inlines):
+                let boldConfig = AttributedStringConfig(
+                    baseFont: config.baseFont.withTraits(.traitBold),
+                    baseColor: config.baseColor,
+                    linkColor: config.linkColor,
+                    codeFont: config.codeFont,
+                    codeBackgroundColor: config.codeBackgroundColor
+                )
+                let attr = inlines.attributedString(config: boldConfig)
+                width = ceil(attr.boundingRect(
+                    with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin],
+                    context: nil
+                ).width)
+            case .image(_, _, let w, _, _):
+                width = CGFloat(w ?? 100)
+            case .spoiler(let inner):
+                width = estimateNaturalWidth(of: inner, config: config)
+            case .blockquote(let inner):
+                width = estimateNaturalWidth(of: inner, config: config) + 16
+            default:
+                width = 80
+            }
+            maxWidth = max(maxWidth, width)
+        }
+        return maxWidth
     }
 }
 

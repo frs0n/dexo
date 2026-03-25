@@ -41,7 +41,8 @@ final class RepliesViewController: UIViewController {
             postLink: postLink,
             baseURL: self.baseURL,
             hasUnsupportedBlocks: hasUnsupported,
-            cookedHTML: post.cooked
+            cookedHTML: post.cooked,
+            emojiURLMap: self.api.emojiURLMap
         )
         return cell
     }

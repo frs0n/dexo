@@ -44,6 +44,7 @@ let project = Project(
                 .external(name: "Alamofire"),
                 .external(name: "GRDB"),
                 .external(name: "SDWebImage"),
+                .external(name: "SDWebImageSVGCoder"),
                 .external(name: "Lightbox"),
                 .package(product: "CookedHTML"),
             ],

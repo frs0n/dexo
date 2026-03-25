@@ -121,4 +121,49 @@ final class InlineExtractorTests: XCTestCase {
         let inlines = parseInlines("<span>a</span><span>b</span>")
         XCTAssertEqual(inlines, [.text("ab")])
     }
+
+    // MARK: - Mention
+
+    func testMention() {
+        let inlines = parseInlines("<a class=\"mention\" href=\"/u/sam\">@sam</a>")
+        XCTAssertEqual(inlines, [.mention(username: "sam", href: "/u/sam")])
+    }
+
+    func testMentionGroup() {
+        let inlines = parseInlines("<a class=\"mention-group\" href=\"/g/admins\">@admins</a>")
+        XCTAssertEqual(inlines, [.mentionGroup(name: "admins", href: "/g/admins")])
+    }
+
+    func testMentionInParagraph() {
+        let inlines = parseInlines("Hello <a class=\"mention\" href=\"/u/sam\">@sam</a> how are you?")
+        XCTAssertEqual(inlines, [
+            .text("Hello "),
+            .mention(username: "sam", href: "/u/sam"),
+            .text(" how are you?"),
+        ])
+    }
+
+    // MARK: - Hashtag
+
+    func testHashtagCooked() {
+        let inlines = parseInlines("<a class=\"hashtag-cooked\" href=\"/c/feature\" data-type=\"category\">#feature</a>")
+        XCTAssertEqual(inlines, [.hashtag(text: "feature", href: "/c/feature", type: "category")])
+    }
+
+    func testHashtagLegacy() {
+        let inlines = parseInlines("<a class=\"hashtag\" href=\"/tag/swift\">#swift</a>")
+        XCTAssertEqual(inlines, [.hashtag(text: "swift", href: "/tag/swift", type: nil)])
+    }
+
+    // MARK: - Spoiler
+
+    func testInlineSpoiler() {
+        let inlines = parseInlines("<span class=\"spoiler\">secret</span>")
+        XCTAssertEqual(inlines, [.spoiler(children: [.text("secret")])])
+    }
+
+    func testSpoilerWithStyledContent() {
+        let inlines = parseInlines("<span class=\"spoiler\"><strong>bold secret</strong></span>")
+        XCTAssertEqual(inlines, [.spoiler(children: [.styledText("bold secret", .bold)])])
+    }
 }

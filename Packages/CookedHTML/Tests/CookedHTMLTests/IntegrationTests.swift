@@ -71,6 +71,12 @@ final class IntegrationTests: XCTestCase {
             XCTAssertEqual(headers.count, 2)
             XCTAssertEqual(rows.count, 2)
             XCTAssertEqual(rows[0].count, 2)
+            // Headers are now [ContentBlock]; first header should be paragraph("Name")
+            if case .paragraph(let inlines) = headers[0].first {
+                XCTAssertEqual(inlines, [.text("Name")])
+            } else {
+                XCTFail("Expected paragraph in header, got \(headers[0])")
+            }
         } else {
             XCTFail("Expected table, got \(blocks[0])")
         }
@@ -112,12 +118,12 @@ final class IntegrationTests: XCTestCase {
             return
         }
 
-        // Headers
+        // Headers — cells are [ContentBlock], text is wrapped in .paragraph
         XCTAssertEqual(headers.count, 3)
-        if case .text(let t) = headers[0].first {
-            XCTAssertEqual(t, "Feature")
+        if case .paragraph(let inlines) = headers[0].first {
+            XCTAssertEqual(inlines, [.text("Feature")])
         } else {
-            XCTFail("Expected text header")
+            XCTFail("Expected paragraph header, got \(headers[0])")
         }
 
         // Rows
@@ -125,22 +131,27 @@ final class IntegrationTests: XCTestCase {
         XCTAssertEqual(rows[0].count, 3)
         XCTAssertEqual(rows[1].count, 3)
 
-        // First row, first cell: bold text
-        if case .styledText(let t, .bold) = rows[0][0].first {
+        // First row, first cell: bold text in paragraph
+        if case .paragraph(let inlines) = rows[0][0].first,
+           case .styledText(let t, .bold) = inlines.first {
             XCTAssertEqual(t, "Bold Feature")
         } else {
-            XCTFail("Expected bold text in row 0 col 0, got \(rows[0][0])")
+            XCTFail("Expected paragraph with bold text in row 0 col 0, got \(rows[0][0])")
         }
 
-        // First row, third cell: link
-        if case .link(let href, _) = rows[0][2].first {
+        // First row, third cell: link in paragraph
+        if case .paragraph(let inlines) = rows[0][2].first,
+           case .link(let href, _) = inlines.first {
             XCTAssertEqual(href, "https://example.com")
         } else {
-            XCTFail("Expected link in row 0 col 2, got \(rows[0][2])")
+            XCTFail("Expected paragraph with link in row 0 col 2, got \(rows[0][2])")
         }
 
-        // Second row, first cell: image with resolved URL
+        // Second row, first cell: image (block-level, not inline)
         if case .image(let src, _, _, _, _) = rows[1][0].first {
+            XCTAssertTrue(src.hasPrefix("https://linux.do"), "Image src should be resolved to absolute URL")
+        } else if case .paragraph(let inlines) = rows[1][0].first,
+                  case .image(let src, _, _, _, _) = inlines.first {
             XCTAssertTrue(src.hasPrefix("https://linux.do"), "Image src should be resolved to absolute URL")
         } else {
             XCTFail("Expected image in row 1 col 0, got \(rows[1][0])")

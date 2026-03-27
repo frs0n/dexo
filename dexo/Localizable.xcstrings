@@ -308,6 +308,38 @@
         }
       }
     },
+    "topic_detail.default_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detail"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "详情"
+          }
+        }
+      }
+    },
+    "home.filter.all_categories" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All Categories"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部分类"
+          }
+        }
+      }
+    },
     "home.top" : {
       "localizations" : {
         "en" : {
@@ -1254,6 +1286,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "点击查看被隐藏的内容"
+          }
+        }
+      }
+    },
+    "topic_detail.bar.jump_to_floor" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jump to Floor"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳转楼层"
+          }
+        }
+      }
+    },
+    "topic_detail.jump.confirm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jump"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳转"
+          }
+        }
+      }
+    },
+    "topic_detail.jump.message %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter floor number (1-%lld)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入楼层号 (1-%lld)"
           }
         }
       }

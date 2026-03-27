@@ -12,11 +12,29 @@ final class HomeViewController: ObservableViewController {
         return sc
     }()
 
+    private let categoryButton: UIButton = {
+        var config = UIButton.Configuration.plain()
+        config.title = String(localized: "home.filter.all_categories")
+        config.image = UIImage(systemName: "line.3.horizontal.decrease", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13))
+        config.imagePlacement = .leading
+        config.imagePadding = 6
+        config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attrs in
+            var a = attrs
+            a.font = UIFont.systemFont(ofSize: 15, weight: .medium)
+            return a
+        }
+        let button = UIButton(configuration: config)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.showsMenuAsPrimaryAction = true
+        return button
+    }()
+
     private lazy var tableView: UITableView = {
         let tv = UITableView(frame: .zero, style: .plain)
         tv.translatesAutoresizingMaskIntoConstraints = false
         tv.register(TopicCell.self, forCellReuseIdentifier: TopicCell.reuseIdentifier)
         tv.delegate = self
+
         return tv
     }()
 
@@ -97,16 +115,30 @@ final class HomeViewController: ObservableViewController {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+
+        let navBottom = navigationController?.navigationBar.frame.maxY ?? 0
+        let segHeight: CGFloat = 44
+        let topInset = navBottom + segHeight + 8
+
+        guard tableView.contentInset.top != topInset else { return }
+        tableView.contentInset.top = topInset
+        tableView.verticalScrollIndicatorInsets.top = topInset
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
 
-        tableView.translatesAutoresizingMaskIntoConstraints = false
         tableView.tableFooterView = footerSpinner
         tableView.refreshControl = refreshControl
+        tableView.contentInsetAdjustmentBehavior = .never
 
-        view.addSubview(segmentedControl)
+        tableView.tableHeaderView = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: CGFloat.leastNormalMagnitude))
         view.addSubview(tableView)
+        view.addSubview(segmentedControl)
+
         view.addSubview(activityIndicator)
         view.addSubview(errorLabel)
         view.addSubview(loginButton)
@@ -116,7 +148,7 @@ final class HomeViewController: ObservableViewController {
             segmentedControl.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             segmentedControl.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
 
-            tableView.topAnchor.constraint(equalTo: segmentedControl.bottomAnchor, constant: 8),
+            tableView.topAnchor.constraint(equalTo: view.topAnchor),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -135,6 +167,8 @@ final class HomeViewController: ObservableViewController {
 
         segmentedControl.addTarget(self, action: #selector(segmentChanged), for: .valueChanged)
         loginButton.addTarget(self, action: #selector(loginTapped), for: .touchUpInside)
+
+        navigationItem.leftBarButtonItem = UIBarButtonItem(customView: categoryButton)
 
         Task {
             await viewModel.loadTopics()
@@ -156,6 +190,9 @@ final class HomeViewController: ObservableViewController {
         loginButton.isHidden = true
         tableView.isHidden = false
         segmentedControl.isHidden = false
+
+        updateCategoryButton()
+        categoryButton.menu = UIMenu(title: "", children: buildCategoryMenuElements())
 
         // Show non-login errors (e.g. rate limit) when topic list is empty
         if let error = viewModel.errorMessage, viewModel.topics.isEmpty {
@@ -211,6 +248,67 @@ final class HomeViewController: ObservableViewController {
         }
     }
 
+    private func updateCategoryButton() {
+        let selected = viewModel.selectedCategory()
+        let title = selected?.name ?? String(localized: "home.filter.all_categories")
+        var config = categoryButton.configuration ?? UIButton.Configuration.plain()
+        config.title = title
+        if let selected, let color = Self.color(fromHex: selected.color) {
+            config.image = UIImage(systemName: "circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 10))
+            config.baseForegroundColor = color
+        } else {
+            config.image = UIImage(systemName: "line.3.horizontal.decrease", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13))
+            config.baseForegroundColor = nil
+        }
+
+        categoryButton.configuration = config
+    }
+
+    private func buildCategoryMenuElements() -> [UIMenuElement] {
+        var elements: [UIMenuElement] = []
+
+        let allAction = UIAction(
+            title: String(localized: "home.filter.all_categories"),
+            state: viewModel.selectedCategoryId == nil ? .on : .off
+        ) { [weak self] _ in
+            self?.selectCategory(nil)
+        }
+        elements.append(allAction)
+
+        for cat in viewModel.categories {
+            let state: UIMenuElement.State = viewModel.selectedCategoryId == cat.id ? .on : .off
+            let catColor = Self.color(fromHex: cat.color)
+            let catImage = Self.colorDotImage(color: catColor)
+            let catAction = UIAction(title: cat.name, image: catImage, state: state) { [weak self] _ in
+                self?.selectCategory(cat.id)
+            }
+            if let subs = cat.subcategoryList, !subs.isEmpty {
+                var groupChildren: [UIMenuElement] = [catAction]
+                for sub in subs {
+                    let subState: UIMenuElement.State = viewModel.selectedCategoryId == sub.id ? .on : .off
+                    let subColor = Self.color(fromHex: sub.color)
+                    let subImage = Self.colorDotImage(color: subColor)
+                    let subAction = UIAction(title: sub.name, image: subImage, state: subState) { [weak self] _ in
+                        self?.selectCategory(sub.id)
+                    }
+                    groupChildren.append(subAction)
+                }
+                elements.append(UIMenu(title: cat.name, image: catImage, children: groupChildren))
+            } else {
+                elements.append(catAction)
+            }
+        }
+        return elements
+    }
+
+    private func selectCategory(_ categoryId: Int?) {
+        viewModel.selectedCategoryId = categoryId
+        updateCategoryButton()
+        Task {
+            await viewModel.loadTopics()
+        }
+    }
+
     private static func color(fromHex hex: String) -> UIColor? {
         let cleaned = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
         guard cleaned.count == 6, let rgb = UInt64(cleaned, radix: 16) else { return nil }
@@ -220,6 +318,15 @@ final class HomeViewController: ObservableViewController {
             blue: CGFloat(rgb & 0xFF) / 255,
             alpha: 1
         )
+    }
+
+    private static func colorDotImage(color: UIColor?) -> UIImage? {
+        guard let color else { return nil }
+        let size = CGSize(width: 12, height: 12)
+        return UIGraphicsImageRenderer(size: size).image { ctx in
+            color.setFill()
+            ctx.cgContext.fillEllipse(in: CGRect(origin: .zero, size: size))
+        }.withRenderingMode(.alwaysOriginal)
     }
 }
 

@@ -1,4 +1,5 @@
 What to Test
 
-• Click user avatar to view user profile
-• Add sorting to search
+- Adapt layout for transparent navigation bar
+- Add category selector on home screen
+- Add scroll-to-top, OP-only filter, and jump-to-floor features

@@ -29,7 +29,18 @@ final class TopicDetailViewController: ObservableViewController {
             return UITableViewCell()
         }
         let visiblePosts = self.viewModel.visiblePosts
-        let floorNumber = (visiblePosts.firstIndex(where: { $0.id == postId }) ?? 0) + 1
+        let floorNumber: Int
+        if self.viewModel.isFilteringByOP {
+            floorNumber = (visiblePosts.firstIndex(where: { $0.id == postId }) ?? 0) + 1
+        } else {
+            // Use stream-based floor number when not filtering
+            let allPostIds = self.viewModel.allPostIds
+            if let streamIndex = allPostIds.firstIndex(of: postId) {
+                floorNumber = streamIndex + 1
+            } else {
+                floorNumber = (visiblePosts.firstIndex(where: { $0.id == postId }) ?? 0) + 1
+            }
+        }
         let postLink = "\(self.baseURL)/t/\(self.topicId)/\(post.postNumber)"
         let config = NativeRenderConfig.default(contentWidth: tableView.bounds.width - 24, baseURL: self.baseURL)
         let hasUnsupported = self.viewModel.unsupportedPostIds.contains(postId)
@@ -81,28 +92,13 @@ final class TopicDetailViewController: ObservableViewController {
         return spinner
     }()
 
-    private let replyButton: UIButton = {
-        let symbolConfig = UIImage.SymbolConfiguration(pointSize: 16)
-        let image = UIImage(systemName: "arrowshape.turn.up.left.fill")
-        let button: UIButton
-        if #available(iOS 26.0, *) {
-            var config = UIButton.Configuration.glass()
-            config.image = image
-            config.cornerStyle = .capsule
-            config.preferredSymbolConfigurationForImage = symbolConfig
-            button = UIButton(configuration: config)
-        } else {
-            var config = UIButton.Configuration.filled()
-            config.image = image
-            config.cornerStyle = .capsule
-            config.baseBackgroundColor = .tintColor
-            config.baseForegroundColor = .white
-            config.preferredSymbolConfigurationForImage = symbolConfig
-            button = UIButton(configuration: config)
-        }
-        button.translatesAutoresizingMaskIntoConstraints = false
-        return button
+    private let headerSpinner: UIActivityIndicatorView = {
+        let spinner = UIActivityIndicatorView(style: .medium)
+        spinner.hidesWhenStopped = true
+        return spinner
     }()
+
+    private let bottomBar = TopicDetailBottomBar()
 
     init(api: DiscourseAPI, topicId: Int) {
         self.api = api
@@ -122,16 +118,19 @@ final class TopicDetailViewController: ObservableViewController {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
         navigationItem.largeTitleDisplayMode = .never
+        title = String(localized: "topic_detail.default_title")
+//        tableView.tableFooterView = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: CGFloat.leastNormalMagnitude))
 
         view.addSubview(tableView)
         view.addSubview(activityIndicator)
         view.addSubview(errorLabel)
-        view.addSubview(replyButton)
+        view.addSubview(bottomBar)
 
+        bottomBar.delegate = self
         tableView.tableFooterView = footerSpinner
 
         NSLayoutConstraint.activate([
-            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            tableView.topAnchor.constraint(equalTo: view.topAnchor),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -144,19 +143,25 @@ final class TopicDetailViewController: ObservableViewController {
             errorLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
             errorLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -32),
 
-            replyButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            replyButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -60),
-            replyButton.widthAnchor.constraint(equalToConstant: 44),
-            replyButton.heightAnchor.constraint(equalToConstant: 44),
+            bottomBar.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            bottomBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12),
         ])
-
-        replyButton.addTarget(self, action: #selector(replyButtonTapped), for: .touchUpInside)
 
         Task {
             await viewModel.loadTopic(id: topicId, containerWidth: view.bounds.width)
         }
         Task {
             await api.loadOrFetchEmojiMap()
+        }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // Reserve bottom space for the floating button row
+        let bottomInset: CGFloat = 44 + 12 + 12
+        if tableView.contentInset.bottom != bottomInset {
+            tableView.contentInset.bottom = bottomInset
+            tableView.verticalScrollIndicatorInsets.bottom = bottomInset
         }
     }
 
@@ -185,10 +190,22 @@ final class TopicDetailViewController: ObservableViewController {
 
         // Footer spinner
         if viewModel.isLoadingMore {
+            tableView.tableFooterView = footerSpinner
             footerSpinner.startAnimating()
         } else {
             footerSpinner.stopAnimating()
+            tableView.tableFooterView = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: CGFloat.leastNormalMagnitude))
         }
+
+        // Header spinner for loading earlier posts
+        if viewModel.isLoadingEarlier {
+            headerSpinner.startAnimating()
+        } else {
+            headerSpinner.stopAnimating()
+        }
+
+        // OP filter button state
+        bottomBar.setOPOnlySelected(viewModel.isFilteringByOP)
 
         // Show posts — all visible posts that have parsed blocks
         if viewModel.isReady {
@@ -209,9 +226,14 @@ final class TopicDetailViewController: ObservableViewController {
     private func updateTitleHeader() {
         let container = UIView()
         container.addSubview(titleLabel)
+        container.addSubview(headerSpinner)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        headerSpinner.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            headerSpinner.topAnchor.constraint(equalTo: container.topAnchor, constant: 8),
+            headerSpinner.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+
+            titleLabel.topAnchor.constraint(equalTo: headerSpinner.bottomAnchor, constant: 4),
             titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
             titleLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
             titleLabel.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8),
@@ -224,7 +246,7 @@ final class TopicDetailViewController: ObservableViewController {
 
     // MARK: - Container Access
 
-    @objc private func replyButtonTapped() {
+    private func replyButtonTapped() {
         guard let authGate = findForumContainer() else { return }
         authGate.requireAuth { [weak self] in
             self?.presentReplyComposer()
@@ -314,6 +336,82 @@ final class TopicDetailViewController: ObservableViewController {
     }
 }
 
+// MARK: - TopicDetailBottomBarDelegate
+
+extension TopicDetailViewController: TopicDetailBottomBarDelegate {
+    func bottomBarDidTapScrollToTop() {
+        guard tableView.numberOfRows(inSection: 0) > 0 else { return }
+        tableView.scrollToRow(at: IndexPath(row: 0, section: 0), at: .top, animated: true)
+    }
+
+    func bottomBarDidTapOPOnly() {
+        viewModel.isFilteringByOP.toggle()
+    }
+
+    func bottomBarDidTapJumpToFloor() {
+        let total = viewModel.totalFloors
+        guard total > 0 else { return }
+
+        let alert = UIAlertController(
+            title: String(localized: "topic_detail.bar.jump_to_floor"),
+            message: String(localized: "topic_detail.jump.message \(total)"),
+            preferredStyle: .alert
+        )
+        alert.addTextField { textField in
+            textField.placeholder = "1-\(total)"
+            textField.keyboardType = .numberPad
+        }
+        alert.addAction(UIAlertAction(title: String(localized: "action.cancel"), style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "topic_detail.jump.confirm"), style: .default) { [weak self] _ in
+            guard let self,
+                  let text = alert.textFields?.first?.text,
+                  let floor = Int(text),
+                  floor >= 1, floor <= total
+            else { return }
+
+            // If the floor is already loaded, just scroll to it
+            if self.viewModel.isFloorLoaded(floor),
+               let visibleRow = self.viewModel.visibleRowForFloor(floor)
+            {
+                self.tableView.scrollToRow(
+                    at: IndexPath(row: visibleRow, section: 0),
+                    at: .top,
+                    animated: true
+                )
+                return
+            }
+
+            // Otherwise fetch from server
+            Task {
+                await self.viewModel.jumpToFloor(floor, containerWidth: self.view.bounds.width)
+                // After jump, the target floor is right after the pinned first post (if any)
+                // Scroll to the target floor row
+                if let visibleRow = self.viewModel.visibleRowForFloor(floor),
+                   visibleRow < self.tableView.numberOfRows(inSection: 0)
+                {
+                    self.tableView.scrollToRow(
+                        at: IndexPath(row: visibleRow, section: 0),
+                        at: .top,
+                        animated: false
+                    )
+                } else if self.tableView.numberOfRows(inSection: 0) > 0 {
+                    // Fallback: scroll to first row if target not found
+                    self.tableView.scrollToRow(
+                        at: IndexPath(row: 0, section: 0),
+                        at: .top,
+                        animated: false
+                    )
+                }
+            }
+        })
+        present(alert, animated: true)
+    }
+
+    func bottomBarDidTapReply() {
+        replyButtonTapped()
+    }
+}
+
 // MARK: - UITableViewDelegate
 
 extension TopicDetailViewController: UITableViewDelegate {
@@ -332,15 +430,34 @@ extension TopicDetailViewController: UITableViewDelegate {
         if offsetY >= headerBottom {
             title = viewModel.topic?.title
         } else {
-            title = nil
+            title = String(localized: "topic_detail.default_title")
         }
     }
 
     func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath) {
         let totalRows = tableView.numberOfRows(inSection: 0)
+
+        // Load more (forward)
         if indexPath.row >= totalRows - 3 {
             Task {
                 await viewModel.loadMorePosts(containerWidth: view.bounds.width)
+            }
+        }
+
+        // Load earlier (backward) — skip row 0 which is the pinned first post
+        if indexPath.row >= 1, indexPath.row <= 3, viewModel.canLoadEarlier {
+            Task {
+                let oldContentHeight = tableView.contentSize.height
+                let oldOffset = tableView.contentOffset.y
+
+                await viewModel.loadEarlierPosts(containerWidth: view.bounds.width)
+
+                // Preserve scroll position after inserting earlier posts
+                let newContentHeight = tableView.contentSize.height
+                let heightDiff = newContentHeight - oldContentHeight
+                if heightDiff > 0 {
+                    tableView.contentOffset.y = oldOffset + heightDiff
+                }
             }
         }
     }

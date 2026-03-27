@@ -144,7 +144,7 @@ final class ProfileHeaderView: UIView {
         loggedInContainer.setCustomSpacing(12, after: statsStackView)
 
         loggedOutContainer.addArrangedSubview(loginPromptLabel)
-        loggedOutContainer.addArrangedSubview(loginButton)
+//        loggedOutContainer.addArrangedSubview(loginButton)
 
         addSubview(loggedInContainer)
         addSubview(loggedOutContainer)
@@ -167,7 +167,7 @@ final class ProfileHeaderView: UIView {
             statsStackView.trailingAnchor.constraint(equalTo: loggedInContainer.trailingAnchor),
         ])
 
-        loginButton.addTarget(self, action: #selector(loginTapped), for: .touchUpInside)
+//        loginButton.addTarget(self, action: #selector(loginTapped), for: .touchUpInside)
     }
 
     func configure(user: DiscourseCurrentUser?, userProfile: DiscourseUserProfile?, summary: DiscourseUserSummary?, baseURL: String) {

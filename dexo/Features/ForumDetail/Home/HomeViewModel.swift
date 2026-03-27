@@ -15,6 +15,9 @@ final class HomeViewModel {
     var errorMessage: String?
     var requiresLogin = false
 
+    var categories: [DiscourseCategory] = []
+    var selectedCategoryId: Int?
+
     private let api: DiscourseAPI
     private var currentPage = 0
     private var usersById: [Int: DiscourseTopicList.User] = [:]
@@ -34,6 +37,11 @@ final class HomeViewModel {
         return categoriesById[catId]
     }
 
+    func selectedCategory() -> DiscourseCategory? {
+        guard let id = selectedCategoryId else { return nil }
+        return categoriesById[id]
+    }
+
     func loadTopics() async {
         isLoading = true
         errorMessage = nil
@@ -42,11 +50,15 @@ final class HomeViewModel {
         do {
             async let categoriesResult: Void = loadCategoriesIfNeeded()
             let result: DiscourseTopicList
-            switch listMode {
-            case .latest:
-                result = try await api.fetchLatestTopics(page: 0)
-            case .top:
-                result = try await api.fetchTopTopics(page: 0)
+            if let cat = selectedCategory() {
+                result = try await api.fetchCategoryTopics(slug: cat.slug, id: cat.id, page: 0)
+            } else {
+                switch listMode {
+                case .latest:
+                    result = try await api.fetchLatestTopics(page: 0)
+                case .top:
+                    result = try await api.fetchTopTopics(page: 0)
+                }
             }
             _ = await categoriesResult
             topics = result.topicList.topics
@@ -67,11 +79,15 @@ final class HomeViewModel {
         let nextPage = currentPage + 1
         do {
             let result: DiscourseTopicList
-            switch listMode {
-            case .latest:
-                result = try await api.fetchLatestTopics(page: nextPage)
-            case .top:
-                result = try await api.fetchTopTopics(page: nextPage)
+            if let cat = selectedCategory() {
+                result = try await api.fetchCategoryTopics(slug: cat.slug, id: cat.id, page: nextPage)
+            } else {
+                switch listMode {
+                case .latest:
+                    result = try await api.fetchLatestTopics(page: nextPage)
+                case .top:
+                    result = try await api.fetchTopTopics(page: nextPage)
+                }
             }
             currentPage = nextPage
             let existingIds = Set(topics.map(\.id))
@@ -96,6 +112,7 @@ final class HomeViewModel {
         guard categoriesById.isEmpty else { return }
         do {
             let list = try await api.fetchCategories()
+            categories = list.categoryList.categories
             indexCategories(list.categoryList.categories)
         } catch {
             // Non-critical — cells just won't show category names

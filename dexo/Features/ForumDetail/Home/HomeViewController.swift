@@ -25,7 +25,6 @@ final class HomeViewController: ObservableViewController {
             return a
         }
         let button = UIButton(configuration: config)
-        button.translatesAutoresizingMaskIntoConstraints = false
         button.showsMenuAsPrimaryAction = true
         return button
     }()
@@ -224,9 +223,8 @@ final class HomeViewController: ObservableViewController {
         tableView.isHidden = false
         segmentedControl.isHidden = false
 
-        updateCategoryButton()
         categoryButton.menu = UIMenu(title: "", children: buildCategoryMenuElements())
-
+        updateCategoryButton()
         // Show non-login errors (e.g. rate limit) when topic list is empty
         if let error = viewModel.errorMessage, viewModel.topics.isEmpty {
             errorLabel.text = error
@@ -293,8 +291,8 @@ final class HomeViewController: ObservableViewController {
             config.image = UIImage(systemName: "line.3.horizontal.decrease", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13))
             config.baseForegroundColor = nil
         }
-
         categoryButton.configuration = config
+        categoryButton.sizeToFit()
     }
 
     private func buildCategoryMenuElements() -> [UIMenuElement] {

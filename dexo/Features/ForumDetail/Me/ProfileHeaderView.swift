@@ -16,7 +16,7 @@ final class ProfileHeaderView: UIView {
         let iv = UIImageView()
         iv.contentMode = .scaleAspectFill
         iv.clipsToBounds = true
-        iv.layer.cornerRadius = 40
+        iv.layer.cornerRadius = 25
         iv.backgroundColor = .secondarySystemFill
         iv.translatesAutoresizingMaskIntoConstraints = false
         return iv
@@ -24,17 +24,15 @@ final class ProfileHeaderView: UIView {
 
     private let usernameLabel: UILabel = {
         let label = UILabel()
-        label.font = .systemFont(ofSize: 16, weight: .medium)
+        label.font = .systemFont(ofSize: 14)
         label.textColor = .secondaryLabel
-        label.textAlignment = .center
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
 
     private let displayNameLabel: UILabel = {
         let label = UILabel()
-        label.font = .systemFont(ofSize: 20, weight: .bold)
-        label.textAlignment = .center
+        label.font = .systemFont(ofSize: 18, weight: .bold)
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
@@ -100,7 +98,7 @@ final class ProfileHeaderView: UIView {
     private let loggedInContainer: UIStackView = {
         let sv = UIStackView()
         sv.axis = .vertical
-        sv.alignment = .center
+        sv.alignment = .leading
         sv.spacing = 8
         sv.translatesAutoresizingMaskIntoConstraints = false
         return sv
@@ -126,16 +124,24 @@ final class ProfileHeaderView: UIView {
     }
 
     private func setupUI() {
-        loggedInContainer.addArrangedSubview(avatarImageView)
-        loggedInContainer.addArrangedSubview(displayNameLabel)
-        loggedInContainer.addArrangedSubview(usernameLabel)
+        // 头像 + 名字横排
+        let nameStack = UIStackView(arrangedSubviews: [displayNameLabel, usernameLabel])
+        nameStack.axis = .vertical
+        nameStack.alignment = .leading
+        nameStack.spacing = 2
+
+        let avatarNameRow = UIStackView(arrangedSubviews: [avatarImageView, nameStack])
+        avatarNameRow.axis = .horizontal
+        avatarNameRow.alignment = .center
+        avatarNameRow.spacing = 12
+
+        loggedInContainer.addArrangedSubview(avatarNameRow)
         loggedInContainer.addArrangedSubview(titleLabel)
         loggedInContainer.addArrangedSubview(bioLabel)
 
-        loggedInContainer.setCustomSpacing(12, after: avatarImageView)
-        loggedInContainer.setCustomSpacing(4, after: displayNameLabel)
-        loggedInContainer.setCustomSpacing(4, after: usernameLabel)
-        loggedInContainer.setCustomSpacing(8, after: titleLabel)
+        loggedInContainer.setCustomSpacing(8, after: avatarNameRow)
+        loggedInContainer.setCustomSpacing(4, after: titleLabel)
+        loggedInContainer.setCustomSpacing(8, after: bioLabel)
 
         loggedInContainer.addArrangedSubview(statsStackView)
         loggedInContainer.setCustomSpacing(16, after: bioLabel)
@@ -150,8 +156,8 @@ final class ProfileHeaderView: UIView {
         addSubview(loggedOutContainer)
 
         NSLayoutConstraint.activate([
-            avatarImageView.widthAnchor.constraint(equalToConstant: 80),
-            avatarImageView.heightAnchor.constraint(equalToConstant: 80),
+            avatarImageView.widthAnchor.constraint(equalToConstant: 50),
+            avatarImageView.heightAnchor.constraint(equalToConstant: 50),
 
             loggedInContainer.topAnchor.constraint(equalTo: topAnchor, constant: 24),
             loggedInContainer.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),

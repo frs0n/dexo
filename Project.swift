@@ -10,6 +10,7 @@ let project = Project(
     ),
     packages: [
         .local(path: "Packages/CookedHTML"),
+        .local(path: "Packages/FluxdoDoh"),
     ],
     settings: .settings(
         base: [
@@ -39,6 +40,8 @@ let project = Project(
                 .glob(pattern: "dexo/Assets.xcassets/**"),
                 .glob(pattern: "dexo/AppIcon.icon/**"),
                 .glob(pattern: "dexo/Localizable.xcstrings"),
+                .glob(pattern: "dexo/DohProxyCA.der"),
+                .glob(pattern: "dexo/Core/aliases.json"),
             ]),
             dependencies: [
                 .external(name: "Alamofire"),
@@ -47,6 +50,7 @@ let project = Project(
                 .external(name: "SDWebImageSVGCoder"),
                 .external(name: "Lightbox"),
                 .package(product: "CookedHTML"),
+                .package(product: "DohProxy"),
             ],
             settings: .settings(
                 base: [

@@ -13,10 +13,26 @@ import UIKit
 class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         SDImageCodersManager.shared.addCoder(SDImageSVGCoder.shared)
+        ProxyManager.shared.start()
+        configureSDWebImageProxy()
         return true
     }
 
     // MARK: UISceneSession Lifecycle
+
+    private func configureSDWebImageProxy() {
+        guard let proxy = ProxyManager.shared.proxyConfiguration else { return }
+        let sessionConfig = URLSessionConfiguration.default
+        sessionConfig.connectionProxyDictionary = proxy
+        let downloaderConfig = SDWebImageDownloaderConfig()
+        downloaderConfig.sessionConfiguration = sessionConfig
+        let downloader = SDWebImageDownloader(config: downloaderConfig)
+        SDWebImageManager.shared.optionsProcessor = SDWebImageOptionsProcessor { url, options, context in
+            var mutableContext = context ?? [:]
+            mutableContext[.imageLoader] = downloader
+            return SDWebImageOptionsResult(options: options.union(.allowInvalidSSLCertificates), context: mutableContext)
+        }
+    }
 
     func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
         // Called when a new scene session is being created.

@@ -181,11 +181,12 @@ final class ForumContainerViewController: UIViewController, AuthGating {
         }
 
         let alert = UIAlertController(
-            title: "Login Required",
-            message: "You need to log in to perform this action.",
+            title: String(localized: "login.required.title"),
+            message: String(localized: "login.required.message"),
             preferredStyle: .alert
         )
-        alert.addAction(UIAlertAction(title: "Log In", style: .default) { [weak self] _ in
+        // Option 1: Discourse User API Key (RSA) login
+        alert.addAction(UIAlertAction(title: String(localized: "login.method.api_key"), style: .default) { [weak self] _ in
             guard let self else { return }
             Task {
                 do {
@@ -201,8 +202,31 @@ final class ForumContainerViewController: UIViewController, AuthGating {
                 }
             }
         })
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        // Option 2: Web login (WKWebView, handles Cloudflare-protected forums)
+        alert.addAction(UIAlertAction(title: String(localized: "login.method.web"), style: .default) { [weak self] _ in
+            guard let self else { return }
+            self.presentWebLogin(then: action)
+        })
+        alert.addAction(UIAlertAction(title: String(localized: "action.cancel"), style: .cancel))
         present(alert, animated: true)
+    }
+
+    private func presentWebLogin(then action: @escaping () -> Void) {
+        guard let url = URL(string: forum.baseURL) else { return }
+        let vc = WebLoginViewController(targetURL: url) { [weak self] cookies, userAgent in
+            guard let self else { return }
+            Task {
+                await self.authManager.loginViaWeb(forum: self.forum, cookies: cookies, userAgent: userAgent)
+                if let forums = try? DatabaseManager.shared.fetchAllForums(),
+                   let updated = forums.first(where: { $0.id == self.forum.id })
+                {
+                    self.forum = updated
+                }
+                action()
+            }
+        }
+        let nav = UINavigationController(rootViewController: vc)
+        present(nav, animated: true)
     }
 
     func isAuthenticated() -> Bool {

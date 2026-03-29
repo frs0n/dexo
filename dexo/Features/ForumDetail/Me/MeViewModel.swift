@@ -19,16 +19,15 @@ final class MeViewModel {
         isLoading = true
         errorMessage = nil
         do {
-            let discourseNotificationList = try await api.fetchNotifications()
-
-            async let profileTask = api.fetchUserProfile(username: discourseNotificationList.username ?? "")
+            let username = AuthManager.shared.username(for: api.baseURL) ?? ""
+            async let profileTask = api.fetchUserProfile(username: username)
             currentUser = await DiscourseCurrentUser(id: profileTask.id, username: profileTask.username, name: profileTask.name, avatarTemplate: profileTask.avatarTemplate)
-            async let summaryTask = api.fetchUserSummary(username: discourseNotificationList.username ?? "")
+            async let summaryTask = api.fetchUserSummary(username: username)
             let (profile, userSummary) = try await (profileTask, summaryTask)
             userProfile = profile
             summary = userSummary
         } catch {
-            if let apiError = error as? DiscourseAPIError, apiError.isNotLoggedIn {
+            if let apiError = error as? DiscourseAPIError, apiError.isNotLoggedIn || apiError.isForbidden {
                 requiresLogin = true
             } else {
                 errorMessage = error.localizedDescription

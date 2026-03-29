@@ -43,9 +43,9 @@ final class SettingsViewController: ObservableViewController {
     /// Sections actually shown in the table, in order.
     private var visibleSections: [Section] {
         #if DEBUG
-        return [.general, .appearance, .debug]
+        return [.general, .appearance, .debug, .network]
         #else
-        return [.general, .appearance]
+        return [.general, .appearance, .network]
         #endif
     }
 
@@ -216,7 +216,10 @@ extension SettingsViewController {
 
     @objc private func dohToggleChanged(_ sender: UISwitch) {
         settings.dohEnabled = sender.isOn
-        if !sender.isOn {
+        if sender.isOn {
+            ProxyManager.shared.restart()
+        } else {
+            ProxyManager.shared.disable()
             DoHResolver.shared.clearCache()
         }
         reloadNetworkSection()
@@ -250,6 +253,7 @@ extension SettingsViewController {
             let action = UIAlertAction(title: provider.title, style: .default) { [weak self] _ in
                 self?.settings.dohProvider = provider
                 DoHResolver.shared.clearCache()
+                ProxyManager.shared.restart()
                 self?.reloadNetworkSection()
             }
             if provider == settings.dohProvider {
@@ -300,6 +304,7 @@ extension SettingsViewController {
             if let url = alert.textFields?.first?.text {
                 self?.settings.dohCustomURL = url
                 DoHResolver.shared.clearCache()
+                ProxyManager.shared.restart()
                 self?.reloadNetworkSection()
             }
         })

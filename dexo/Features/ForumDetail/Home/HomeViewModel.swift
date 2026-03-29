@@ -65,7 +65,7 @@ final class HomeViewModel {
             canLoadMore = result.topicList.moreTopicsUrl != nil
             indexUsers(result.users)
         } catch {
-            if let apiError = error as? DiscourseAPIError, apiError.isNotLoggedIn {
+            if let apiError = error as? DiscourseAPIError, apiError.isNotLoggedIn || apiError.isForbidden {
                 requiresLogin = true
             }
             errorMessage = error.localizedDescription

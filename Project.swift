@@ -39,7 +39,6 @@ let project = Project(
                 .glob(pattern: "dexo/Assets.xcassets/**"),
                 .glob(pattern: "dexo/AppIcon.icon/**"),
                 .glob(pattern: "dexo/Localizable.xcstrings"),
-                .glob(pattern: "dexo/DohProxyCA.der"),
                 .glob(pattern: "dexo/Core/aliases.json"),
             ]),
             dependencies: [

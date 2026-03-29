@@ -3,23 +3,26 @@ import Foundation
 
 final class DiscourseAPI {
     let baseURL: String
-    private let session: Session
     private(set) var emojiReady: Bool = false
+    private let interceptor: DiscourseAuthInterceptor
+
+    private lazy var session: Session = DiscourseAPI.makeSession(interceptor: interceptor)
 
     init(forum: ForumInstance) {
         self.baseURL = forum.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let interceptor = DiscourseAuthInterceptor(baseURL: baseURL)
-        let config = URLSessionConfiguration.af.default
-//        config.protocolClasses = [DoHURLProtocol.self] + (config.protocolClasses ?? [])
-        self.session = Session(configuration: config, interceptor: interceptor)
+        self.interceptor = DiscourseAuthInterceptor(baseURL: baseURL)
     }
 
     init(baseURL: String) {
         self.baseURL = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let interceptor = DiscourseAuthInterceptor(baseURL: self.baseURL)
+        self.interceptor = DiscourseAuthInterceptor(baseURL: self.baseURL)
+    }
+
+    private static func makeSession(interceptor: DiscourseAuthInterceptor) -> Session {
         let config = URLSessionConfiguration.af.default
-//        config.protocolClasses = [DoHURLProtocol.self] + (config.protocolClasses ?? [])
-        self.session = Session(configuration: config, interceptor: interceptor)
+        config.httpCookieAcceptPolicy = .never
+        config.httpShouldSetCookies = false
+        return Session(configuration: config, interceptor: interceptor)
     }
 
     // MARK: - Public API
@@ -158,6 +161,11 @@ final class DiscourseAPI {
         }
     }
 
+    func deleteSession(username: String) async {
+        let url = baseURL + "/session/\(username)"
+        _ = await session.request(url, method: .delete).serializingData().response
+    }
+
     func revokeApiKey(apiKey: String) async {
         let url = baseURL + "/user-api-key/revoke"
         let headers: HTTPHeaders = ["User-Api-Key": apiKey]
@@ -179,18 +187,29 @@ final class DiscourseAPI {
         }
         #endif
 
-        if let statusCode = response.response?.statusCode, !(200 ..< 300).contains(statusCode),
-           let data = response.data
-        {
-            if let errBody = try? JSONDecoder().decode(DiscourseErrorResponse.self, from: data),
-               !errBody.errors.isEmpty
-            {
-                throw DiscourseAPIError(messages: errBody.errors, errorType: errBody.errorType)
+        if let newToken = response.response?.value(forHTTPHeaderField: "X-CSRF-Token") {
+            interceptor.updateCSRFToken(newToken)
+        }
+        if let httpResponse = response.response, let url = httpResponse.url,
+           KeychainHelper.getUserApiKey(for: baseURL) == AuthManager.webAuthSentinel {
+            WebCookieStore.shared.mergeResponseHeaders(httpResponse.allHeaderFields, for: url)
+        }
+
+        if let statusCode = response.response?.statusCode, !(200 ..< 300).contains(statusCode) {
+            if statusCode == 403 {
+                let data = response.data ?? Data()
+                if let errBody = try? JSONDecoder().decode(DiscourseErrorResponse.self, from: data), !errBody.errors.isEmpty {
+                    throw DiscourseAPIError(messages: errBody.errors, errorType: "forbidden")
+                }
+                throw DiscourseAPIError(messages: ["Session expired, please log in again"], errorType: "forbidden")
             }
-            if let failBody = try? JSONDecoder().decode(DiscourseFailedResponse.self, from: data),
-               let message = failBody.message
-            {
-                throw DiscourseAPIError(messages: [message], errorType: failBody.failed)
+            if let data = response.data {
+                if let errBody = try? JSONDecoder().decode(DiscourseErrorResponse.self, from: data), !errBody.errors.isEmpty {
+                    throw DiscourseAPIError(messages: errBody.errors, errorType: errBody.errorType)
+                }
+                if let failBody = try? JSONDecoder().decode(DiscourseFailedResponse.self, from: data), let message = failBody.message {
+                    throw DiscourseAPIError(messages: [message], errorType: failBody.failed)
+                }
             }
         }
 
@@ -223,6 +242,10 @@ struct DiscourseAPIError: LocalizedError {
         errorType == "not_logged_in"
     }
 
+    var isForbidden: Bool {
+        errorType == "forbidden"
+    }
+
     var errorDescription: String? {
         messages.joined(separator: "\n")
     }
@@ -232,6 +255,10 @@ struct DiscourseAPIError: LocalizedError {
 
 private final class DiscourseAuthInterceptor: RequestInterceptor {
     private let baseURL: String
+    private var csrfToken: String?
+    private var isFetchingCSRF = false
+    private var csrfWaiters: [(String?) -> Void] = []
+    private let csrfLock = NSLock()
 
     init(baseURL: String) {
         self.baseURL = baseURL
@@ -239,14 +266,132 @@ private final class DiscourseAuthInterceptor: RequestInterceptor {
 
     func adapt(_ urlRequest: URLRequest, for session: Session, completion: @escaping (Result<URLRequest, Error>) -> Void) {
         var request = urlRequest
-        // Dynamically read User API Key from Keychain on each request
         if let userApiKey = KeychainHelper.getUserApiKey(for: baseURL) {
-            request.setValue(userApiKey, forHTTPHeaderField: "User-Api-Key")
+            if userApiKey == AuthManager.webAuthSentinel {
+                if let url = request.url {
+                    let header = WebCookieStore.shared.cookieHeader(for: url)
+                    if !header.isEmpty {
+                        request.setValue(header, forHTTPHeaderField: "Cookie")
+                    }
+                    if let ua = WebCookieStore.shared.userAgent {
+                        request.setValue(ua, forHTTPHeaderField: "User-Agent")
+                    }
+                }
+                let isMutating = request.httpMethod == "POST" || request.httpMethod == "PUT" || request.httpMethod == "DELETE"
+                if isMutating {
+                    request.setValue("application/json", forHTTPHeaderField: "Accept")
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    getOrFetchCSRFToken(session: session) { [weak self] token in
+                        if let token {
+                            request.setValue(token, forHTTPHeaderField: "X-CSRF-Token")
+                        }
+                        completion(.success(request))
+                    }
+                    return
+                }
+            } else {
+                request.setValue(userApiKey, forHTTPHeaderField: "User-Api-Key")
+            }
         }
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if request.httpMethod == "POST" {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
         completion(.success(request))
+    }
+
+    func retry(_ request: Request, for session: Session, dueTo error: any Error, completion: @escaping (RetryResult) -> Void) {
+        guard let userApiKey = KeychainHelper.getUserApiKey(for: baseURL),
+              userApiKey == AuthManager.webAuthSentinel,
+              request.retryCount == 0,
+              let httpMethod = request.request?.httpMethod,
+              httpMethod == "POST" || httpMethod == "PUT" || httpMethod == "DELETE"
+        else {
+            completion(.doNotRetry)
+            return
+        }
+        // Retry on 403/422 (CSRF token invalid or expired)
+        let statusCode = request.response?.statusCode
+        guard statusCode == 403 || statusCode == 422 || statusCode == nil else {
+            completion(.doNotRetry)
+            return
+        }
+        // Invalidate token so next getOrFetchCSRFToken will fetch fresh one.
+        // If another retry already reset and is fetching, we just join the waiters.
+        csrfLock.lock()
+        let wasAlreadyInvalidated = csrfToken == nil
+        csrfToken = nil
+        if wasAlreadyInvalidated {
+            // Another retry already invalidated — just wait for its fetch
+            csrfLock.unlock()
+        } else {
+            // We are the first to invalidate — reset fetch state so a fresh fetch starts
+            isFetchingCSRF = false
+            csrfWaiters = []
+            csrfLock.unlock()
+        }
+        getOrFetchCSRFToken(session: session) { token in
+            completion(token != nil ? .retry : .doNotRetry)
+        }
+    }
+
+    /// Returns cached CSRF token if available, otherwise fetches one.
+    /// Concurrent callers wait for a single in-flight fetch to complete.
+    private func getOrFetchCSRFToken(session: Session, completion: @escaping (String?) -> Void) {
+        csrfLock.lock()
+        if let token = csrfToken {
+            csrfLock.unlock()
+            completion(token)
+            return
+        }
+        csrfWaiters.append(completion)
+        let alreadyFetching = isFetchingCSRF
+        isFetchingCSRF = true
+        csrfLock.unlock()
+        guard !alreadyFetching else { return }
+        fetchCSRFToken(session: session) { [weak self] token in
+            guard let self else { return }
+            self.csrfLock.lock()
+            self.csrfToken = token
+            self.isFetchingCSRF = false
+            let waiters = self.csrfWaiters
+            self.csrfWaiters = []
+            self.csrfLock.unlock()
+            waiters.forEach { $0(token) }
+        }
+    }
+
+    func invalidateCSRFToken() {
+        csrfLock.lock()
+        csrfToken = nil
+        csrfLock.unlock()
+    }
+
+    func updateCSRFToken(_ token: String) {
+        csrfLock.lock()
+        csrfToken = token
+        csrfLock.unlock()
+    }
+
+    private func fetchCSRFToken(session: Session, completion: @escaping (String?) -> Void) {
+        guard let url = URL(string: "\(baseURL)/session/csrf.json") else {
+            completion(nil)
+            return
+        }
+        var req = URLRequest(url: url)
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        let cookieHeader = WebCookieStore.shared.cookieHeader(for: url)
+        if !cookieHeader.isEmpty { req.setValue(cookieHeader, forHTTPHeaderField: "Cookie") }
+        if let ua = WebCookieStore.shared.userAgent { req.setValue(ua, forHTTPHeaderField: "User-Agent") }
+        session.request(req).responseData { response in
+            guard let data = response.data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let token = json["csrf"] as? String
+            else {
+                completion(nil)
+                return
+            }
+            completion(token)
+        }
     }
 }

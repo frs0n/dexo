@@ -1,5 +1,4 @@
 {
-  "originHash" : "79762477f8e820e9deb3cf4e91c2f815294ed3e8c74d10dd151a2add89a7c8ec",
   "pins" : [
     {
       "identity" : "swiftsoup",
@@ -11,5 +10,5 @@
       }
     }
   ],
-  "version" : 3
+  "version" : 2
 }

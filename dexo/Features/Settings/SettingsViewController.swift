@@ -216,9 +216,12 @@ extension SettingsViewController {
 
     @objc private func dohToggleChanged(_ sender: UISwitch) {
         settings.dohEnabled = sender.isOn
-        if !sender.isOn {
-            DoHResolver.shared.clearCache()
-        }
+//        if sender.isOn {
+//            ProxyManager.shared.restart()
+//        } else {
+//            ProxyManager.shared.disable()
+//            DoHResolver.shared.clearCache()
+//        }
         reloadNetworkSection()
     }
 
@@ -249,7 +252,8 @@ extension SettingsViewController {
         for provider in AppSettings.DoHProvider.allCases {
             let action = UIAlertAction(title: provider.title, style: .default) { [weak self] _ in
                 self?.settings.dohProvider = provider
-                DoHResolver.shared.clearCache()
+//                DoHResolver.shared.clearCache()
+//                ProxyManager.shared.restart()
                 self?.reloadNetworkSection()
             }
             if provider == settings.dohProvider {
@@ -299,7 +303,8 @@ extension SettingsViewController {
         alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
             if let url = alert.textFields?.first?.text {
                 self?.settings.dohCustomURL = url
-                DoHResolver.shared.clearCache()
+//                DoHResolver.shared.clearCache()
+//                ProxyManager.shared.restart()
                 self?.reloadNetworkSection()
             }
         })

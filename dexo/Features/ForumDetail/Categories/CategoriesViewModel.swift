@@ -21,7 +21,7 @@ final class CategoriesViewModel {
             let result = try await api.fetchCategories()
             categories = result.categoryList.categories.filter { $0.parentCategoryId == nil }
         } catch {
-            if let apiError = error as? DiscourseAPIError, apiError.isNotLoggedIn {
+            if let apiError = error as? DiscourseAPIError, apiError.isNotLoggedIn || apiError.isForbidden {
                 requiresLogin = true
             }
             errorMessage = error.localizedDescription

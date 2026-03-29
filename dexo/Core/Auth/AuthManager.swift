@@ -172,17 +172,47 @@ final class AuthManager: @unchecked Sendable {
         }
     }
 
+    static let webAuthSentinel = "__web__"
+
+    /// Called after WebLoginViewController successfully captures cookies.
+    /// Saves the sentinel key so isAuthenticated returns true, then fetches the username.
+    func loginViaWeb(forum: ForumInstance, cookies: [HTTPCookie], userAgent: String?) async {
+        let baseURL = forum.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        WebCookieStore.shared.setCookies(cookies)
+        WebCookieStore.shared.userAgent = userAgent
+        try? KeychainHelper.saveUserApiKey(AuthManager.webAuthSentinel, for: baseURL)
+
+        let api = DiscourseAPI(baseURL: baseURL)
+        do {
+            let currentUser = try await api.fetchNotifications()
+            usernameCache[baseURL] = currentUser.username
+            var forumToUpdate = forum
+            forumToUpdate.username = currentUser.username
+            _ = try? DatabaseManager.shared.saveForum(&forumToUpdate)
+        } catch {
+            // Cookie auth worked but username fetch failed — still authenticated
+        }
+    }
+
     func logout(forum: ForumInstance) {
         let baseURL = forum.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
 
-        // Revoke the API key on the server (best-effort, fire-and-forget)
+        let api = DiscourseAPI(baseURL: baseURL)
         if let apiKey = KeychainHelper.getUserApiKey(for: baseURL) {
-            let api = DiscourseAPI(baseURL: baseURL)
-            Task { await api.revokeApiKey(apiKey: apiKey) }
+            if apiKey == AuthManager.webAuthSentinel {
+                // Web login — delete server session
+                if let username = usernameCache[baseURL] {
+                    Task { await api.deleteSession(username: username) }
+                }
+            } else {
+                // API key login — revoke the key
+                Task { await api.revokeApiKey(apiKey: apiKey) }
+            }
         }
 
         KeychainHelper.deleteUserApiKey(for: baseURL)
         KeychainHelper.deleteRSAKeyPair(for: baseURL)
+        WebCookieStore.shared.clearCookies(for: baseURL)
         usernameCache.removeValue(forKey: baseURL)
 
         // Clear username from DB

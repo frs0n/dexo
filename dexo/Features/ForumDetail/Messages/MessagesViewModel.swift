@@ -21,7 +21,7 @@ final class MessagesViewModel {
             let result = try await api.fetchPrivateMessages(username: username)
             messages = result.topicList.topics
         } catch {
-            if let apiError = error as? DiscourseAPIError, apiError.isNotLoggedIn {
+            if let apiError = error as? DiscourseAPIError, apiError.isNotLoggedIn || apiError.isForbidden {
                 requiresLogin = true
             }
             errorMessage = error.localizedDescription

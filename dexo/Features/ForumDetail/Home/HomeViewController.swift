@@ -168,7 +168,7 @@ final class HomeViewController: ObservableViewController {
         if #available(iOS 26, *) {
             let blurView = UIVisualEffectView(effect: UIGlassEffect())
             blurView.translatesAutoresizingMaskIntoConstraints = false
-            blurView.layer.cornerRadius = segmentedControl.bounds.height / 2
+            blurView.layer.cornerRadius = segmentedControl.bounds.height / 2 + 1
 
             blurView.clipsToBounds = true
 
@@ -176,7 +176,7 @@ final class HomeViewController: ObservableViewController {
 
             NSLayoutConstraint.activate([
                 blurView.topAnchor.constraint(equalTo: segmentedControl.topAnchor, constant: -2),
-                blurView.bottomAnchor.constraint(equalTo: segmentedControl.bottomAnchor, constant: 2),
+                blurView.bottomAnchor.constraint(equalTo: segmentedControl.bottomAnchor, constant: 3),
                 blurView.leadingAnchor.constraint(equalTo: segmentedControl.leadingAnchor, constant: -2),
                 blurView.trailingAnchor.constraint(equalTo: segmentedControl.trailingAnchor, constant: 2),
             ])

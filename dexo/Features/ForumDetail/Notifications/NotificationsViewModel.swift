@@ -21,7 +21,7 @@ final class NotificationsViewModel {
             let result = try await api.fetchNotifications()
             notifications = result.notifications
         } catch {
-            if let apiError = error as? DiscourseAPIError, apiError.isNotLoggedIn {
+            if let apiError = error as? DiscourseAPIError, apiError.isNotLoggedIn || apiError.isForbidden {
                 requiresLogin = true
             }
             errorMessage = error.localizedDescription

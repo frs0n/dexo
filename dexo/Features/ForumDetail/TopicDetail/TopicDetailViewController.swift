@@ -9,6 +9,8 @@ final class TopicDetailViewController: ObservableViewController {
     private let topicId: Int
     private let baseURL: String
     private var hasTitleHeader = false
+    private var suppressAutoLoadEarlier = false
+    private var isLoadingEarlierLocally = false
 
     private lazy var tableView: UITableView = {
         let tv = UITableView(frame: .zero, style: .plain)
@@ -106,6 +108,21 @@ final class TopicDetailViewController: ObservableViewController {
 
     private let bottomBar = TopicDetailBottomBar()
 
+    private lazy var jumpOverlay: UIView = {
+        let v = UIView()
+        v.translatesAutoresizingMaskIntoConstraints = false
+        v.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.85)
+        let spinner = UIActivityIndicatorView(style: .medium)
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        spinner.startAnimating()
+        v.addSubview(spinner)
+        NSLayoutConstraint.activate([
+            spinner.centerXAnchor.constraint(equalTo: v.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: v.centerYAnchor),
+        ])
+        return v
+    }()
+
     init(api: DiscourseAPI, topicId: Int) {
         self.api = api
         self.viewModel = TopicDetailViewModel(api: api)
@@ -174,7 +191,7 @@ final class TopicDetailViewController: ObservableViewController {
     }
 
     override func updateUI() {
-        // Title header (set once)
+        // Title header (set once, but rebuild when canLoadEarlier changes after a jump)
         if let topic = viewModel.topic, !hasTitleHeader {
             let displayTitle = topic.fancyTitle ?? topic.title
             configureTitleLabel(displayTitle)
@@ -229,6 +246,17 @@ final class TopicDetailViewController: ObservableViewController {
             }
             snapshot.appendItems(readyIds, toSection: 0)
             dataSource.apply(snapshot, animatingDifferences: false)
+
+            // After a jump, scroll to the target floor once snapshot is applied
+            if let targetFloor = viewModel.jumpTargetFloor {
+                viewModel.jumpTargetFloor = nil
+                let targetRow = viewModel.visibleRowForFloor(targetFloor) ?? 0
+                let rowCount = tableView.numberOfRows(inSection: 0)
+                guard rowCount > 0 else { return }
+                let safeRow = min(targetRow, rowCount - 1)
+                tableView.layoutIfNeeded()
+                tableView.scrollToRow(at: IndexPath(row: safeRow, section: 0), at: .top, animated: false)
+            }
         }
     }
 
@@ -241,7 +269,6 @@ final class TopicDetailViewController: ObservableViewController {
         NSLayoutConstraint.activate([
             headerSpinner.topAnchor.constraint(equalTo: container.topAnchor, constant: 8),
             headerSpinner.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-
             titleLabel.topAnchor.constraint(equalTo: headerSpinner.bottomAnchor, constant: 4),
             titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
             titleLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
@@ -455,7 +482,7 @@ extension TopicDetailViewController: TopicDetailBottomBarDelegate {
                   floor >= 1, floor <= total
             else { return }
 
-            // If the floor is already loaded, just scroll to it
+            // If already loaded, just scroll
             if self.viewModel.isFloorLoaded(floor),
                let visibleRow = self.viewModel.visibleRowForFloor(floor)
             {
@@ -467,30 +494,36 @@ extension TopicDetailViewController: TopicDetailBottomBarDelegate {
                 return
             }
 
-            // Otherwise fetch from server
+            // Show overlay while fetching; scroll is handled in updateUI via jumpTargetFloor
+            self.showJumpOverlay()
+            self.suppressAutoLoadEarlier = true
             Task {
                 await self.viewModel.jumpToFloor(floor, containerWidth: self.view.bounds.width)
-                // After jump, the target floor is right after the pinned first post (if any)
-                // Scroll to the target floor row
-                if let visibleRow = self.viewModel.visibleRowForFloor(floor),
-                   visibleRow < self.tableView.numberOfRows(inSection: 0)
-                {
-                    self.tableView.scrollToRow(
-                        at: IndexPath(row: visibleRow, section: 0),
-                        at: .top,
-                        animated: false
-                    )
-                } else if self.tableView.numberOfRows(inSection: 0) > 0 {
-                    // Fallback: scroll to first row if target not found
-                    self.tableView.scrollToRow(
-                        at: IndexPath(row: 0, section: 0),
-                        at: .top,
-                        animated: false
-                    )
-                }
+                self.hideJumpOverlay()
+                // Re-enable auto load-earlier after a short delay so the user
+                // can scroll up naturally without immediately triggering a load
+                try? await Task.sleep(nanoseconds: 800_000_000)
+                self.suppressAutoLoadEarlier = false
             }
         })
         present(alert, animated: true)
+    }
+
+    private func showJumpOverlay() {
+        if jumpOverlay.superview == nil {
+            view.addSubview(jumpOverlay)
+            NSLayoutConstraint.activate([
+                jumpOverlay.topAnchor.constraint(equalTo: tableView.topAnchor),
+                jumpOverlay.leadingAnchor.constraint(equalTo: tableView.leadingAnchor),
+                jumpOverlay.trailingAnchor.constraint(equalTo: tableView.trailingAnchor),
+                jumpOverlay.bottomAnchor.constraint(equalTo: tableView.bottomAnchor),
+            ])
+        }
+        jumpOverlay.isHidden = false
+    }
+
+    private func hideJumpOverlay() {
+        jumpOverlay.isHidden = true
     }
 
     func bottomBarDidTapReply() {
@@ -514,32 +547,49 @@ extension TopicDetailViewController: UITableViewDelegate {
         let headerBottom = header.frame.maxY
         let offsetY = scrollView.contentOffset.y + scrollView.safeAreaInsets.top
         navigationItem.titleView = offsetY >= headerBottom ? navTitleLabel : nil
+
+        // Trigger load-earlier when scrolled within 200pt of the top of the content
+        // (below the header), guarded by suppressAutoLoadEarlier set during jump
+        guard !suppressAutoLoadEarlier,
+              viewModel.canLoadEarlier,
+              !isLoadingEarlierLocally
+        else { return }
+        let contentTop = -(scrollView.adjustedContentInset.top)
+        if scrollView.contentOffset.y <= contentTop + 200 {
+            // Capture anchor synchronously before any async work
+            let anchorIndexPath = tableView.indexPathsForVisibleRows?.first
+            let anchorId = anchorIndexPath.flatMap { dataSource.itemIdentifier(for: $0) }
+            let anchorCellTop = anchorIndexPath.map {
+                tableView.rectForRow(at: $0).minY - tableView.contentOffset.y
+            }
+            isLoadingEarlierLocally = true
+            Task {
+                await viewModel.loadEarlierPosts(containerWidth: view.bounds.width)
+                // Yield to let @Observable-driven updateUI + dataSource.apply run first
+                await Task.yield()
+                // Restore position after snapshot is applied and layout is settled
+                if let anchorId,
+                   let anchorCellTop,
+                   let newIndexPath = self.dataSource.indexPath(for: anchorId)
+                {
+                    CATransaction.begin()
+                    CATransaction.setDisableActions(true)
+                    self.tableView.layoutIfNeeded()
+                    let newCellTop = self.tableView.rectForRow(at: newIndexPath).minY
+                    self.tableView.contentOffset.y = newCellTop - anchorCellTop
+                    CATransaction.commit()
+                }
+                self.isLoadingEarlierLocally = false
+            }
+        }
     }
 
     func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath) {
         let totalRows = tableView.numberOfRows(inSection: 0)
-
         // Load more (forward)
         if indexPath.row >= totalRows - 3 {
             Task {
                 await viewModel.loadMorePosts(containerWidth: view.bounds.width)
-            }
-        }
-
-        // Load earlier (backward) — skip row 0 which is the pinned first post
-        if indexPath.row >= 1, indexPath.row <= 3, viewModel.canLoadEarlier {
-            Task {
-                let oldContentHeight = tableView.contentSize.height
-                let oldOffset = tableView.contentOffset.y
-
-                await viewModel.loadEarlierPosts(containerWidth: view.bounds.width)
-
-                // Preserve scroll position after inserting earlier posts
-                let newContentHeight = tableView.contentSize.height
-                let heightDiff = newContentHeight - oldContentHeight
-                if heightDiff > 0 {
-                    tableView.contentOffset.y = oldOffset + heightDiff
-                }
             }
         }
     }

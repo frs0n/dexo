@@ -12,6 +12,8 @@ final class TopicDetailViewModel {
     var isLoadingMore = false
     var isLoadingEarlier = false
     var isFilteringByOP = false
+    var isJumping = false
+    var jumpTargetFloor: Int?
     var errorMessage: String?
 
     private let api: DiscourseAPI
@@ -223,38 +225,27 @@ final class TopicDetailViewModel {
 
         let targetIndex = max(0, min(floor - 1, allPostIds.count - 1))
         let startIndex = targetIndex
-        let endIndex = min(startIndex + 10, allPostIds.count)
+        let endIndex = min(startIndex + 20, allPostIds.count)
         let batch = Array(allPostIds[startIndex..<endIndex])
 
         guard !batch.isEmpty else { return }
 
-        isLoading = true
+        isJumping = true
+        jumpTargetFloor = floor
 
-        // Clear current posts but keep firstPost cached
+        // Clear current posts
         topic?.postStream.posts.removeAll()
         parsedBlocks.removeAll()
         unsupportedPostIds.removeAll()
         loadedPostIds.removeAll()
+        firstPost = nil
 
         do {
-            // Determine if we need to fetch the first post separately
-            let firstPostId = allPostIds[0]
-            let needFirstPost: Bool = startIndex > 0
-            var allBatchIds = batch
-            if needFirstPost, !batch.contains(firstPostId) {
-                allBatchIds.insert(firstPostId, at: 0)
-            }
-
-            let response = try await api.fetchTopicPosts(topicId: topicId, postIds: allBatchIds)
+            let response = try await api.fetchTopicPosts(topicId: topicId, postIds: batch)
 
             // Sort by stream order
             let idOrder = Dictionary(uniqueKeysWithValues: allPostIds.enumerated().map { ($1, $0) })
             let sortedPosts = response.postStream.posts.sorted { (idOrder[$0.id] ?? 0) < (idOrder[$1.id] ?? 0) }
-
-            // Cache the first post if we got it
-            if let fp = sortedPosts.first(where: { $0.id == firstPostId }) {
-                firstPost = fp
-            }
 
             topic?.postStream.posts = sortedPosts
 
@@ -263,7 +254,6 @@ final class TopicDetailViewModel {
                 parseAndStore(post: post)
             }
 
-            // loadedRangeStart reflects the contiguous range (excluding the pinned first post)
             loadedRangeStart = startIndex
             loadedRangeEnd = endIndex
         } catch {
@@ -271,10 +261,17 @@ final class TopicDetailViewModel {
             print("[TopicDetail] Jump failed: \(error)")
             #endif
             errorMessage = error.localizedDescription
+            jumpTargetFloor = nil
         }
 
-        isLoading = false
-        isReady = true
+        isJumping = false
+        if isReady {
+            // Force updateUI to re-run even if isReady was already true
+            isReady = false
+            isReady = true
+        } else {
+            isReady = true
+        }
     }
 
     // MARK: - Private

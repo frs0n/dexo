@@ -10,9 +10,11 @@ final class WebLoginViewController: UIViewController {
     private lazy var webView: WKWebView = {
         let config = WKWebViewConfiguration()
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
+
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.navigationDelegate = coordinator
         wv.uiDelegate = coordinator
+        wv.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
         wv.translatesAutoresizingMaskIntoConstraints = false
         return wv
     }()
@@ -110,7 +112,8 @@ final class WebLoginViewController: UIViewController {
         }
 
         func webView(_ webView: WKWebView, didReceive challenge: URLAuthenticationChallenge,
-                     completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+                     completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void)
+        {
             completionHandler(.performDefaultHandling, nil)
         }
 
@@ -145,7 +148,8 @@ final class WebLoginViewController: UIViewController {
         }
 
         func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
-                     for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+                     for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView?
+        {
             if navigationAction.targetFrame == nil {
                 webView.load(navigationAction.request)
             }

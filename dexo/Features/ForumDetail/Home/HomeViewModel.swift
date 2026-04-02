@@ -2,6 +2,7 @@ import Foundation
 
 enum HomeListMode {
     case latest
+    case hot
     case top
 }
 
@@ -56,6 +57,8 @@ final class HomeViewModel {
                 switch listMode {
                 case .latest:
                     result = try await api.fetchLatestTopics(page: 0)
+                case .hot:
+                    result = try await api.fetchHotTopics(page: 0)
                 case .top:
                     result = try await api.fetchTopTopics(page: 0)
                 }
@@ -85,6 +88,8 @@ final class HomeViewModel {
                 switch listMode {
                 case .latest:
                     result = try await api.fetchLatestTopics(page: nextPage)
+                case .hot:
+                    result = try await api.fetchHotTopics(page: nextPage)
                 case .top:
                     result = try await api.fetchTopTopics(page: nextPage)
                 }

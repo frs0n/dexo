@@ -3,6 +3,7 @@ import Foundation
 
 enum DiscourseRouter {
     case latestTopics(page: Int)
+    case hotTopics(page: Int)
     case topTopics(page: Int)
     case categories
     case topic(id: Int)
@@ -25,22 +26,27 @@ enum DiscourseRouter {
     case userProfile(username: String)
     case createBookmark
     case deleteBookmark(id: Int)
-
+    case toggleReaction(postId: Int, reactionId: String)
+    
     var method: HTTPMethod {
         switch self {
         case .createTopic, .createBookmark:
             return .post
+        case .toggleReaction:
+            return .put
         case .deleteBookmark:
             return .delete
         default:
             return .get
         }
     }
-
+    
     var path: String {
         switch self {
         case .latestTopics(let page):
             return "/latest.json?page=\(page)"
+        case .hotTopics(let page):
+            return "/hot.json?page=\(page)"
         case .topTopics(let page):
             return "/top.json?page=\(page)"
         case .categories:
@@ -78,9 +84,9 @@ enum DiscourseRouter {
         case .tagSearch(let query, let categoryId):
             let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
             var path = "/tags/filter/search?q=\(encoded)&limit=5"
-//            if let categoryId {
-//                path += "&categoryId=\(categoryId)"
-//            }
+            //            if let categoryId {
+            //                path += "&categoryId=\(categoryId)"
+            //            }
             return path
         case .bookmarks(let username):
             return "/u/\(username)/bookmarks.json"
@@ -92,7 +98,9 @@ enum DiscourseRouter {
             return "/bookmarks.json"
         case .deleteBookmark(let id):
             return "/bookmarks/\(id).json"
+        case .toggleReaction(let postId, let reactionId):
+            let encoded = reactionId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? reactionId
+            return "/discourse-reactions/posts/\(postId)/custom-reactions/\(encoded)/toggle.json"
         }
     }
 }
-

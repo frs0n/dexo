@@ -9,8 +9,11 @@ final class TopicDetailViewController: ObservableViewController {
     private let topicId: Int
     private let baseURL: String
     private var hasTitleHeader = false
-    private var suppressAutoLoadEarlier = false
     private var isLoadingEarlierLocally = false
+    private var pendingScrollToFloor: Int?
+    private var lastScrollOffset: CGFloat = 0
+    /// Anchor info for restoring scroll position after loading earlier posts
+    private var earlierLoadAnchor: (postId: Int, cellTopOffset: CGFloat)?
 
     private lazy var tableView: UITableView = {
         let tv = UITableView(frame: .zero, style: .plain)
@@ -57,6 +60,7 @@ final class TopicDetailViewController: ObservableViewController {
             baseURL: self.baseURL,
             hasUnsupportedBlocks: hasUnsupported,
             cookedHTML: post.cooked,
+            validReactions: self.viewModel.topic?.validReactions ?? [],
         )
         return cell
     }
@@ -188,6 +192,19 @@ final class TopicDetailViewController: ObservableViewController {
             tableView.contentInset.bottom = bottomInset
             tableView.verticalScrollIndicatorInsets.bottom = bottomInset
         }
+
+        // Execute deferred jump scroll after layout is complete
+        if let floor = pendingScrollToFloor {
+            pendingScrollToFloor = nil
+            let targetRow = viewModel.visibleRowForFloor(floor) ?? 0
+            let rowCount = tableView.numberOfRows(inSection: 0)
+            guard rowCount > 0 else { return }
+            let safeRow = min(targetRow, rowCount - 1)
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            tableView.scrollToRow(at: IndexPath(row: safeRow, section: 0), at: .top, animated: false)
+            CATransaction.commit()
+        }
     }
 
     override func updateUI() {
@@ -245,17 +262,29 @@ final class TopicDetailViewController: ObservableViewController {
                 return post.id
             }
             snapshot.appendItems(readyIds, toSection: 0)
-            dataSource.apply(snapshot, animatingDifferences: false)
 
-            // After a jump, scroll to the target floor once snapshot is applied
+            // Restore scroll position when earlier posts were prepended
+            if let anchor = earlierLoadAnchor {
+                earlierLoadAnchor = nil
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                dataSource.apply(snapshot, animatingDifferences: false)
+                tableView.layoutIfNeeded()
+                if let newIndexPath = dataSource.indexPath(for: anchor.postId) {
+                    let newCellTop = tableView.rectForRow(at: newIndexPath).minY
+                    tableView.contentOffset.y = newCellTop - anchor.cellTopOffset
+                }
+                CATransaction.commit()
+                isLoadingEarlierLocally = false
+            } else {
+                dataSource.apply(snapshot, animatingDifferences: false)
+            }
+
+            // After a jump, defer scroll to next layout pass so cells are sized
             if let targetFloor = viewModel.jumpTargetFloor {
                 viewModel.jumpTargetFloor = nil
-                let targetRow = viewModel.visibleRowForFloor(targetFloor) ?? 0
-                let rowCount = tableView.numberOfRows(inSection: 0)
-                guard rowCount > 0 else { return }
-                let safeRow = min(targetRow, rowCount - 1)
-                tableView.layoutIfNeeded()
-                tableView.scrollToRow(at: IndexPath(row: safeRow, section: 0), at: .top, animated: false)
+                pendingScrollToFloor = targetFloor
+                tableView.setNeedsLayout()
             }
         }
     }
@@ -494,16 +523,12 @@ extension TopicDetailViewController: TopicDetailBottomBarDelegate {
                 return
             }
 
-            // Show overlay while fetching; scroll is handled in updateUI via jumpTargetFloor
+            // Show overlay while fetching; scroll is handled in viewDidLayoutSubviews via pendingScrollToFloor
             self.showJumpOverlay()
-            self.suppressAutoLoadEarlier = true
+            self.hasTitleHeader = false
             Task {
                 await self.viewModel.jumpToFloor(floor, containerWidth: self.view.bounds.width)
                 self.hideJumpOverlay()
-                // Re-enable auto load-earlier after a short delay so the user
-                // can scroll up naturally without immediately triggering a load
-                try? await Task.sleep(nanoseconds: 800_000_000)
-                self.suppressAutoLoadEarlier = false
             }
         })
         present(alert, animated: true)
@@ -548,38 +573,29 @@ extension TopicDetailViewController: UITableViewDelegate {
         let offsetY = scrollView.contentOffset.y + scrollView.safeAreaInsets.top
         navigationItem.titleView = offsetY >= headerBottom ? navTitleLabel : nil
 
-        // Trigger load-earlier when scrolled within 200pt of the top of the content
-        // (below the header), guarded by suppressAutoLoadEarlier set during jump
-        guard !suppressAutoLoadEarlier,
+        let currentOffset = scrollView.contentOffset.y
+        let isScrollingUp = currentOffset < lastScrollOffset
+        lastScrollOffset = currentOffset
+
+        // Only trigger load-earlier when user is actively scrolling UP
+        // and within 200pt of the top — prevents false triggers after jump
+        guard isScrollingUp,
               viewModel.canLoadEarlier,
               !isLoadingEarlierLocally
         else { return }
         let contentTop = -(scrollView.adjustedContentInset.top)
         if scrollView.contentOffset.y <= contentTop + 200 {
             // Capture anchor synchronously before any async work
-            let anchorIndexPath = tableView.indexPathsForVisibleRows?.first
-            let anchorId = anchorIndexPath.flatMap { dataSource.itemIdentifier(for: $0) }
-            let anchorCellTop = anchorIndexPath.map {
-                tableView.rectForRow(at: $0).minY - tableView.contentOffset.y
+            if let anchorIndexPath = tableView.indexPathsForVisibleRows?.first,
+               let anchorId = dataSource.itemIdentifier(for: anchorIndexPath)
+            {
+                let cellTopOffset = tableView.rectForRow(at: anchorIndexPath).minY - tableView.contentOffset.y
+                earlierLoadAnchor = (postId: anchorId, cellTopOffset: cellTopOffset)
             }
             isLoadingEarlierLocally = true
             Task {
                 await viewModel.loadEarlierPosts(containerWidth: view.bounds.width)
-                // Yield to let @Observable-driven updateUI + dataSource.apply run first
-                await Task.yield()
-                // Restore position after snapshot is applied and layout is settled
-                if let anchorId,
-                   let anchorCellTop,
-                   let newIndexPath = self.dataSource.indexPath(for: anchorId)
-                {
-                    CATransaction.begin()
-                    CATransaction.setDisableActions(true)
-                    self.tableView.layoutIfNeeded()
-                    let newCellTop = self.tableView.rectForRow(at: newIndexPath).minY
-                    self.tableView.contentOffset.y = newCellTop - anchorCellTop
-                    CATransaction.commit()
-                }
-                self.isLoadingEarlierLocally = false
+                // updateUI (triggered by @Observable) will handle position restoration
             }
         }
     }
@@ -593,6 +609,7 @@ extension TopicDetailViewController: UITableViewDelegate {
             }
         }
     }
+
 }
 
 // MARK: - PostCellDelegate
@@ -633,6 +650,16 @@ extension TopicDetailViewController: PostCellDelegate {
                 } else if let bookmarkId = post.bookmarkId {
                     try await api.deleteBookmark(id: bookmarkId)
                 }
+            } catch {
+                // Optimistic UI — server state will reconcile on next refresh
+            }
+        }
+    }
+
+    func postCell(didTapReaction reactionId: String, forPost post: DiscourseTopicDetail.Post) {
+        Task {
+            do {
+                try await api.toggleReaction(postId: post.id, reactionId: reactionId)
             } catch {
                 // Optimistic UI — server state will reconcile on next refresh
             }

@@ -31,6 +31,10 @@ final class DiscourseAPI {
         try await request(route: .latestTopics(page: page))
     }
 
+    func fetchHotTopics(page: Int = 0) async throws -> DiscourseTopicList {
+        try await request(route: .hotTopics(page: page))
+    }
+
     func fetchTopTopics(page: Int = 0) async throws -> DiscourseTopicList {
         try await request(route: .topTopics(page: page))
     }
@@ -129,6 +133,15 @@ final class DiscourseAPI {
         let response = await session.request(url, method: route.method).serializingData().response
         if let statusCode = response.response?.statusCode, !(200 ..< 300).contains(statusCode) {
             throw DiscourseAPIError(messages: ["Failed to delete bookmark"], errorType: nil)
+        }
+    }
+
+    func toggleReaction(postId: Int, reactionId: String) async throws {
+        let route = DiscourseRouter.toggleReaction(postId: postId, reactionId: reactionId)
+        let url = baseURL + route.path
+        let response = await session.request(url, method: route.method).serializingData().response
+        if let statusCode = response.response?.statusCode, !(200 ..< 300).contains(statusCode) {
+            throw DiscourseAPIError(messages: ["Failed to toggle reaction"], errorType: nil)
         }
     }
 

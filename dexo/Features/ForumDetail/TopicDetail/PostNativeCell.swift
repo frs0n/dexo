@@ -12,6 +12,7 @@ final class PostNativeCell: UITableViewCell {
     private var postLink: String?
     private var currentPost: DiscourseTopicDetail.Post?
     private var cookedHTML: String = ""
+    private var validReactions: [String] = []
 
     // MARK: - Header UI
 
@@ -113,7 +114,6 @@ final class PostNativeCell: UITableViewCell {
         button.titleLabel?.font = .systemFont(ofSize: 12, weight: .medium)
         button.tintColor = .secondaryLabel
         button.contentHorizontalAlignment = .leading
-        button.translatesAutoresizingMaskIntoConstraints = false
         button.isHidden = true
         return button
     }()
@@ -123,9 +123,45 @@ final class PostNativeCell: UITableViewCell {
         sv.axis = .horizontal
         sv.spacing = 2
         sv.alignment = .center
-        sv.translatesAutoresizingMaskIntoConstraints = false
         sv.isHidden = true
         return sv
+    }()
+
+    // Pre-created reaction views to avoid alloc/dealloc churn during scroll
+    private let reactionImageViews: [UIImageView] = (0 ..< 3).map { _ in
+        let iv = UIImageView()
+        iv.contentMode = .scaleAspectFit
+        iv.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            iv.widthAnchor.constraint(equalToConstant: 16),
+            iv.heightAnchor.constraint(equalToConstant: 16),
+        ])
+        return iv
+    }
+
+    private let reactionCountLabel: UILabel = {
+        let label = UILabel()
+        label.font = .systemFont(ofSize: 12)
+        label.textColor = .secondaryLabel
+        return label
+    }()
+
+    private let bottomLeftStack: UIStackView = {
+        let sv = UIStackView()
+        sv.axis = .horizontal
+        sv.spacing = 4
+        sv.alignment = .center
+        sv.translatesAutoresizingMaskIntoConstraints = false
+        return sv
+    }()
+
+    private let reactButton: UIButton = {
+        let button = UIButton(type: .system)
+        let config = UIImage.SymbolConfiguration(pointSize: 11, weight: .medium)
+        button.setImage(UIImage(systemName: "heart", withConfiguration: config), for: .normal)
+        button.tintColor = .tertiaryLabel
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
     }()
 
     private let bookmarkButton: UIButton = {
@@ -184,8 +220,15 @@ final class PostNativeCell: UITableViewCell {
         contentView.addSubview(sourceButton)
         contentView.addSubview(replyToLabel)
         contentView.addSubview(contentStackView)
-        contentView.addSubview(showRepliesButton)
-        contentView.addSubview(reactionStackView)
+        bottomLeftStack.addArrangedSubview(showRepliesButton)
+        for iv in reactionImageViews {
+            reactionStackView.addArrangedSubview(iv)
+            iv.isHidden = true
+        }
+        reactionStackView.addArrangedSubview(reactionCountLabel)
+        reactionCountLabel.isHidden = true
+        bottomLeftStack.addArrangedSubview(reactionStackView)
+        contentView.addSubview(bottomLeftStack)
         contentView.addSubview(bookmarkButton)
         contentView.addSubview(replyButton)
         contentView.addSubview(copyLinkButton)
@@ -230,18 +273,15 @@ final class PostNativeCell: UITableViewCell {
             contentStackView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
             contentStackView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
 
-            showRepliesButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 4),
-            showRepliesButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            showRepliesButton.heightAnchor.constraint(equalToConstant: Self.bottomBarHeight),
-
-            reactionStackView.centerYAnchor.constraint(equalTo: showRepliesButton.centerYAnchor),
-            reactionStackView.trailingAnchor.constraint(equalTo: bookmarkButton.leadingAnchor, constant: -2),
+            bottomLeftStack.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 4),
+            bottomLeftStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            bottomLeftStack.heightAnchor.constraint(equalToConstant: Self.bottomBarHeight),
 
             replyButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 4),
             replyButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             replyButton.heightAnchor.constraint(equalToConstant: Self.bottomBarHeight),
             replyButton.widthAnchor.constraint(equalToConstant: 28),
-            replyButton.bottomAnchor.constraint(equalTo: separatorLine.topAnchor, constant: -6),
+            { let c = replyButton.bottomAnchor.constraint(equalTo: separatorLine.topAnchor, constant: -6); c.priority = .init(999); return c }(),
 
             copyLinkButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 4),
             copyLinkButton.trailingAnchor.constraint(equalTo: replyButton.leadingAnchor),
@@ -280,12 +320,14 @@ final class PostNativeCell: UITableViewCell {
         baseURL: String,
         hasUnsupportedBlocks: Bool,
         cookedHTML: String,
+        validReactions: [String],
     ) {
         postId = post.id
         self.postLink = postLink
         currentPost = post
         self.delegate = delegate
         self.cookedHTML = cookedHTML
+        self.validReactions = validReactions
         sourceButton.isHidden = !hasUnsupportedBlocks
 
         nameLabel.text = post.name
@@ -358,32 +400,34 @@ final class PostNativeCell: UITableViewCell {
     }
 
     private func configureReactions(_ reactions: [DiscourseTopicDetail.Reaction], count: Int, baseURL: String) {
-        reactionStackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
         guard !reactions.isEmpty else {
             reactionStackView.isHidden = true
             return
         }
 
-        for reaction in reactions.prefix(3) {
-            let iv = UIImageView()
-            iv.contentMode = .scaleAspectFit
-            iv.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                iv.widthAnchor.constraint(equalToConstant: 16),
-                iv.heightAnchor.constraint(equalToConstant: 16),
-            ])
-            if let url = URL(string: EmojiStore.lookup(for: reaction.id) ?? "") {
-                iv.sd_setImage(with: url)
+        let visible = reactions.prefix(3)
+        for (i, iv) in reactionImageViews.enumerated() {
+            if i < visible.count {
+                let reaction = visible[visible.index(visible.startIndex, offsetBy: i)]
+                if let url = URL(string: EmojiStore.lookup(for: reaction.id) ?? "") {
+                    iv.sd_setImage(with: url)
+                } else {
+                    iv.sd_cancelCurrentImageLoad()
+                    iv.image = nil
+                }
+                iv.isHidden = false
+            } else {
+                iv.isHidden = true
+                iv.sd_cancelCurrentImageLoad()
+                iv.image = nil
             }
-            reactionStackView.addArrangedSubview(iv)
         }
 
         if count > 0 {
-            let countLabel = UILabel()
-            countLabel.font = .systemFont(ofSize: 12)
-            countLabel.textColor = .secondaryLabel
-            countLabel.text = "\(count)"
-            reactionStackView.addArrangedSubview(countLabel)
+            reactionCountLabel.text = "\(count)"
+            reactionCountLabel.isHidden = false
+        } else {
+            reactionCountLabel.isHidden = true
         }
 
         reactionStackView.isHidden = false
@@ -481,21 +525,106 @@ final class PostNativeCell: UITableViewCell {
         }
     }
 
+    @objc private func reactButtonTapped() {
+        guard let post = currentPost else { return }
+
+        if validReactions.isEmpty {
+            // No valid_reactions field — just toggle like
+            delegate?.postCell(didTapReaction: "heart", forPost: post)
+            return
+        }
+
+        // Build emoji picker as a horizontal stack in a popover
+        let pickerVC = UIViewController()
+        let stack = UIStackView()
+        stack.axis = .horizontal
+        stack.spacing = 8
+        stack.alignment = .center
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        pickerVC.view.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: pickerVC.view.topAnchor, constant: 8),
+            stack.bottomAnchor.constraint(equalTo: pickerVC.view.bottomAnchor, constant: -8),
+            stack.leadingAnchor.constraint(equalTo: pickerVC.view.leadingAnchor, constant: 12),
+            stack.trailingAnchor.constraint(equalTo: pickerVC.view.trailingAnchor, constant: -12),
+        ])
+
+        let emojiSize: CGFloat = 28
+        for reactionId in validReactions {
+            let button = UIButton(type: .custom)
+            button.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                button.widthAnchor.constraint(equalToConstant: emojiSize),
+                button.heightAnchor.constraint(equalToConstant: emojiSize),
+            ])
+            button.accessibilityLabel = reactionId
+
+            if let urlString = EmojiStore.url(for: reactionId) ?? EmojiStore.lookup(for: reactionId),
+               let url = URL(string: urlString)
+            {
+                let iv = UIImageView()
+                iv.contentMode = .scaleAspectFit
+                iv.translatesAutoresizingMaskIntoConstraints = false
+                iv.sd_setImage(with: url)
+                iv.isUserInteractionEnabled = false
+                button.addSubview(iv)
+                NSLayoutConstraint.activate([
+                    iv.topAnchor.constraint(equalTo: button.topAnchor),
+                    iv.bottomAnchor.constraint(equalTo: button.bottomAnchor),
+                    iv.leadingAnchor.constraint(equalTo: button.leadingAnchor),
+                    iv.trailingAnchor.constraint(equalTo: button.trailingAnchor),
+                ])
+            } else {
+                button.setTitle(":\(reactionId):", for: .normal)
+                button.titleLabel?.font = .systemFont(ofSize: 12)
+                button.setTitleColor(.label, for: .normal)
+            }
+
+            button.addAction(UIAction { [weak self] _ in
+                guard let self, let post = self.currentPost else { return }
+                pickerVC.dismiss(animated: true)
+                self.delegate?.postCell(didTapReaction: reactionId, forPost: post)
+            }, for: .touchUpInside)
+
+            stack.addArrangedSubview(button)
+        }
+
+        let pickerSize = CGSize(
+            width: CGFloat(validReactions.count) * (emojiSize + 8) + 16,
+            height: emojiSize + 16
+        )
+        pickerVC.preferredContentSize = pickerSize
+        pickerVC.modalPresentationStyle = .popover
+        if let popover = pickerVC.popoverPresentationController {
+            popover.sourceView = reactButton
+            popover.sourceRect = reactButton.bounds
+            popover.permittedArrowDirections = [.down, .up]
+            popover.delegate = self
+        }
+
+        // Find presenting view controller
+        var responder: UIResponder? = self
+        while let next = responder?.next {
+            if let vc = next as? UIViewController {
+                vc.present(pickerVC, animated: true)
+                break
+            }
+            responder = next
+        }
+    }
+
     @objc private func bookmarkButtonTapped() {
         guard let post = currentPost else { return }
         let config = UIImage.SymbolConfiguration(pointSize: 11, weight: .medium)
         let isFilled = bookmarkButton.image(for: .normal) == UIImage(systemName: "bookmark.fill", withConfiguration: config)
-        let isBookmarked: Bool
         if isFilled {
             bookmarkButton.setImage(UIImage(systemName: "bookmark", withConfiguration: config), for: .normal)
             bookmarkButton.tintColor = .tertiaryLabel
-            isBookmarked = false
         } else {
             bookmarkButton.setImage(UIImage(systemName: "bookmark.fill", withConfiguration: config), for: .normal)
             bookmarkButton.tintColor = .systemYellow
-            isBookmarked = true
         }
-        delegate?.postCell(didToggleBookmarkForPost: post, isBookmarked: isBookmarked)
+        delegate?.postCell(didToggleBookmarkForPost: post, isBookmarked: !isFilled)
     }
 
     override func prepareForReuse() {
@@ -534,8 +663,14 @@ final class PostNativeCell: UITableViewCell {
         flairImageView.image = nil
         flairImageView.backgroundColor = nil
         flairImageView.isHidden = true
-        reactionStackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
         reactionStackView.isHidden = true
+        for iv in reactionImageViews {
+            iv.sd_cancelCurrentImageLoad()
+            iv.image = nil
+            iv.isHidden = true
+        }
+        reactionCountLabel.isHidden = true
+        validReactions = []
         let config = UIImage.SymbolConfiguration(pointSize: 11, weight: .medium)
         bookmarkButton.setImage(UIImage(systemName: "bookmark", withConfiguration: config), for: .normal)
         bookmarkButton.tintColor = .tertiaryLabel
@@ -574,5 +709,13 @@ extension PostNativeCell: UITextViewDelegate {
     func textView(_ textView: UITextView, shouldInteractWith URL: URL, in characterRange: NSRange, interaction: UITextItemInteraction) -> Bool {
         delegate?.postCell(didTapLinkURL: URL)
         return false
+    }
+}
+
+// MARK: - UIPopoverPresentationControllerDelegate
+
+extension PostNativeCell: UIPopoverPresentationControllerDelegate {
+    func adaptivePresentationStyle(for controller: UIPresentationController) -> UIModalPresentationStyle {
+        .none
     }
 }

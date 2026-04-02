@@ -9,6 +9,7 @@ struct DiscourseTopicDetail: Decodable {
     let categoryId: Int?
     let createdAt: String
     var postStream: PostStream
+    let validReactions: [String]
 
     enum CodingKeys: String, CodingKey {
         case id, title
@@ -18,6 +19,20 @@ struct DiscourseTopicDetail: Decodable {
         case categoryId = "category_id"
         case createdAt = "created_at"
         case postStream = "post_stream"
+        case validReactions = "valid_reactions"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        fancyTitle = try? container.decodeIfPresent(String.self, forKey: .fancyTitle)
+        postsCount = try container.decode(Int.self, forKey: .postsCount)
+        replyCount = try container.decode(Int.self, forKey: .replyCount)
+        categoryId = try? container.decodeIfPresent(Int.self, forKey: .categoryId)
+        createdAt = try container.decode(String.self, forKey: .createdAt)
+        postStream = try container.decode(PostStream.self, forKey: .postStream)
+        validReactions = (try? container.decodeIfPresent([String].self, forKey: .validReactions)) ?? []
     }
 
     struct PostStream: Decodable {
@@ -60,6 +75,8 @@ struct DiscourseTopicDetail: Decodable {
         let bookmarkId: Int?
         let reactions: [Reaction]
         let reactionUsersCount: Int
+        let currentUserReaction: Reaction?
+        let currentUserUsedMainReaction: Bool
 
         enum CodingKeys: String, CodingKey {
             case id, name, username, cooked
@@ -77,6 +94,8 @@ struct DiscourseTopicDetail: Decodable {
             case bookmarkId = "bookmark_id"
             case reactions
             case reactionUsersCount = "reaction_users_count"
+            case currentUserReaction = "current_user_reaction"
+            case currentUserUsedMainReaction = "current_user_used_main_reaction"
         }
 
         init(from decoder: Decoder) throws {
@@ -100,6 +119,8 @@ struct DiscourseTopicDetail: Decodable {
             bookmarkId = try? container.decodeIfPresent(Int.self, forKey: .bookmarkId)
             reactions = (try? container.decodeIfPresent([Reaction].self, forKey: .reactions)) ?? []
             reactionUsersCount = (try? container.decodeIfPresent(Int.self, forKey: .reactionUsersCount)) ?? 0
+            currentUserReaction = try? container.decodeIfPresent(Reaction.self, forKey: .currentUserReaction)
+            currentUserUsedMainReaction = (try? container.decodeIfPresent(Bool.self, forKey: .currentUserUsedMainReaction)) ?? false
         }
     }
 }

@@ -292,6 +292,22 @@
         }
       }
     },
+    "home.hot" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hot"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "热门"
+          }
+        }
+      }
+    },
     "home.latest" : {
       "localizations" : {
         "en" : {
@@ -335,7 +351,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "热门"
+            "value" : "排行榜"
           }
         }
       }

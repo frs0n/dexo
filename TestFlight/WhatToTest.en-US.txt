@@ -1,3 +1,6 @@
 What to Test
 
-1. Fix floor navigation jump anomaly
+1. Scroll optimization
+2. Load-earlier only triggers on upward scroll, prevents false triggers after jump
+3. Reaction display moved next to replies button
+4. Home page: added Hot tab (Latest / Hot / Top)

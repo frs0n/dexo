@@ -117,11 +117,11 @@ enum DiscourseQuoteRenderer: BlockRenderer {
 
             headerStack.topAnchor.constraint(equalTo: container.topAnchor, constant: 10),
             headerStack.leadingAnchor.constraint(equalTo: bar.trailingAnchor, constant: 10),
-            headerStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            { let c = headerStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12); c.priority = .init(999); return c }(),
 
             contentStack.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 8),
             contentStack.leadingAnchor.constraint(equalTo: bar.trailingAnchor, constant: 10),
-            contentStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            { let c = contentStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12); c.priority = .init(999); return c }(),
             contentStack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
         ])
 

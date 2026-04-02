@@ -41,7 +41,7 @@ final class RepliesViewController: UIViewController {
             postLink: postLink,
             baseURL: self.baseURL,
             hasUnsupportedBlocks: hasUnsupported,
-            cookedHTML: post.cooked,
+            cookedHTML: post.cooked, validReactions: [],
         )
         return cell
     }
@@ -187,6 +187,14 @@ extension RepliesViewController: PostCellDelegate {
         let vc = UserProfileViewController(api: api, username: username)
         let nav = UINavigationController(rootViewController: vc)
         present(nav, animated: true)
+    }
+
+    func postCell(didTapReaction reactionId: String, forPost post: DiscourseTopicDetail.Post) {
+        Task {
+            do {
+                try await api.toggleReaction(postId: post.id, reactionId: reactionId)
+            } catch {}
+        }
     }
 
     private func findAuthGating() -> AuthGating? {

@@ -9,6 +9,7 @@ protocol PostCellDelegate: AnyObject {
     func postCell(didTapReplyToPost post: DiscourseTopicDetail.Post)
     func postCell(didToggleBookmarkForPost post: DiscourseTopicDetail.Post, isBookmarked: Bool)
     func postCell(didTapAvatarForUsername username: String)
+    func postCell(didTapReaction reactionId: String, forPost post: DiscourseTopicDetail.Post)
 }
 
 final class PostWebViewCell: UITableViewCell {

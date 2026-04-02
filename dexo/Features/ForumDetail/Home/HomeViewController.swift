@@ -6,7 +6,7 @@ final class HomeViewController: ObservableViewController {
     private weak var authGate: AuthGating?
 
     private let segmentedControl: UISegmentedControl = {
-        let sc = UISegmentedControl(items: [String(localized: "home.latest"), String(localized: "home.top")])
+        let sc = UISegmentedControl(items: [String(localized: "home.latest"), String(localized: "home.hot"), String(localized: "home.top")])
         sc.selectedSegmentIndex = 0
         sc.backgroundColor = UIColor.clear
         sc.translatesAutoresizingMaskIntoConstraints = false
@@ -260,7 +260,11 @@ final class HomeViewController: ObservableViewController {
     }
 
     @objc private func segmentChanged() {
-        viewModel.listMode = segmentedControl.selectedSegmentIndex == 0 ? .latest : .top
+        switch segmentedControl.selectedSegmentIndex {
+        case 0: viewModel.listMode = .latest
+        case 1: viewModel.listMode = .hot
+        default: viewModel.listMode = .top
+        }
         Task {
             await viewModel.loadTopics()
         }

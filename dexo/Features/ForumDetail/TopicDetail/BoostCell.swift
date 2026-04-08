@@ -274,7 +274,7 @@ private final class BoostChipView: UIView {
             hasDeleteInteraction = false
         }
 
-        let sizedAvatar = boost.user.avatarTemplate?.replacingOccurrences(of: "{size}", with: "60")
+        let sizedAvatar = boost.user.avatarTemplate?.replacingOccurrences(of: "{size}", with: "48")
         if let sizedAvatar {
             let urlString = sizedAvatar.hasPrefix("http") ? sizedAvatar : assetBaseURL + sizedAvatar
             if let url = URL(string: urlString) {

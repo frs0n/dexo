@@ -39,6 +39,10 @@ final class ThemePickerViewController: ObservableViewController {
         case presets
         case custom
     }
+
+    private var customSchemes: [CustomThemeScheme] {
+        settings.customThemeSchemes
+    }
 }
 
 // MARK: - UITableViewDataSource
@@ -51,14 +55,14 @@ extension ThemePickerViewController: UITableViewDataSource {
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         switch Section(rawValue: section)! {
         case .presets: return ThemeDefinition.presets.count
-        case .custom: return 1
+        case .custom: return customSchemes.count + 1 // +1 for "Add Custom Theme"
         }
     }
 
     func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
         switch Section(rawValue: section)! {
         case .presets: return String(localized: "theme.section.presets")
-        case .custom: return nil
+        case .custom: return String(localized: "theme.section.custom")
         }
     }
 
@@ -69,14 +73,26 @@ extension ThemePickerViewController: UITableViewDataSource {
             let theme = ThemeDefinition.presets[indexPath.row]
             let isSelected = settings.selectedThemeId == theme.id
             cell.configure(with: theme, isSelected: isSelected)
-
             return cell
+
         case .custom:
-            let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
-            cell.textLabel?.text = String(localized: "theme.custom")
-            cell.accessoryType = settings.selectedThemeId == "custom" ? .checkmark : .disclosureIndicator
-
-            return cell
+            let schemes = customSchemes
+            if indexPath.row < schemes.count {
+                let cell = tableView.dequeueReusableCell(withIdentifier: ThemePresetCell.reuseId, for: indexPath) as! ThemePresetCell
+                let scheme = schemes[indexPath.row]
+                let themeDef = scheme.toThemeDefinition()
+                let isSelected = settings.selectedThemeId == themeDef.id
+                cell.configure(with: themeDef, isSelected: isSelected)
+                return cell
+            } else {
+                let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+                cell.textLabel?.text = String(localized: "theme.add_custom")
+                cell.textLabel?.textColor = themeManager.accentColor
+                cell.imageView?.image = UIImage(systemName: "plus.circle.fill")
+                cell.imageView?.tintColor = themeManager.accentColor
+                cell.backgroundColor = themeManager.cardBackgroundColor
+                return cell
+            }
         }
     }
 }
@@ -91,10 +107,44 @@ extension ThemePickerViewController: UITableViewDelegate {
         case .presets:
             let theme = ThemeDefinition.presets[indexPath.row]
             themeManager.selectTheme(id: theme.id)
+
         case .custom:
-            let vc = CustomThemeViewController()
-            navigationController?.pushViewController(vc, animated: true)
+            let schemes = customSchemes
+            if indexPath.row < schemes.count {
+                let scheme = schemes[indexPath.row]
+                themeManager.selectTheme(id: "custom_\(scheme.id)")
+            } else {
+                let vc = CustomThemeViewController(scheme: nil)
+                navigationController?.pushViewController(vc, animated: true)
+            }
         }
+    }
+
+    func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
+        guard Section(rawValue: indexPath.section) == .custom else { return nil }
+        let schemes = customSchemes
+        guard indexPath.row < schemes.count else { return nil }
+
+        let scheme = schemes[indexPath.row]
+
+        let edit = UIContextualAction(style: .normal, title: String(localized: "theme.action.edit")) { [weak self] _, _, completion in
+            let vc = CustomThemeViewController(scheme: scheme)
+            self?.navigationController?.pushViewController(vc, animated: true)
+            completion(true)
+        }
+        edit.backgroundColor = .systemBlue
+
+        let delete = UIContextualAction(style: .destructive, title: String(localized: "theme.action.delete")) { [weak self] _, _, completion in
+            guard let self else { completion(false); return }
+            self.settings.deleteCustomThemeScheme(id: scheme.id)
+            if self.settings.selectedThemeId == "custom_\(scheme.id)" {
+                self.themeManager.selectTheme(id: "default")
+            }
+            self.themeManager.notifyChange()
+            completion(true)
+        }
+
+        return UISwipeActionsConfiguration(actions: [delete, edit])
     }
 }
 
@@ -174,6 +224,22 @@ final class CustomThemeViewController: ObservableViewController {
 
     private let themeManager = ThemeManager.shared
     private let settings = AppSettings.shared
+    private var scheme: CustomThemeScheme
+    private let isNewScheme: Bool
+
+    init(scheme: CustomThemeScheme?) {
+        if let scheme {
+            self.scheme = scheme
+            self.isNewScheme = false
+        } else {
+            self.scheme = CustomThemeScheme()
+            self.isNewScheme = true
+        }
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
 
     private lazy var tableView: UITableView = {
         let tv = ThemedTableView(frame: .zero, style: .insetGrouped)
@@ -185,8 +251,20 @@ final class CustomThemeViewController: ObservableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = String(localized: "theme.custom")
+        title = isNewScheme
+            ? String(localized: "theme.add_custom")
+            : String(localized: "theme.edit_custom")
 
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: String(localized: "theme.save"),
+            style: .done,
+            target: self,
+            action: #selector(saveTapped)
+        )
+    }
+
+    override func loadView() {
+        super.loadView()
         view.addSubview(tableView)
         NSLayoutConstraint.activate([
             tableView.topAnchor.constraint(equalTo: view.topAnchor),
@@ -201,20 +279,30 @@ final class CustomThemeViewController: ObservableViewController {
         tableView.reloadData()
     }
 
+    @objc private func saveTapped() {
+        if scheme.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            scheme.name = String(localized: "theme.custom")
+        }
+        settings.saveCustomThemeScheme(scheme)
+        themeManager.selectTheme(id: "custom_\(scheme.id)")
+        navigationController?.popViewController(animated: true)
+    }
+
     // MARK: - Data
 
     private enum Section: Int, CaseIterable {
+        case name
         case light
         case dark
     }
 
-    private enum Row: Int, CaseIterable {
+    private enum ColorRow: Int, CaseIterable {
         case accent
         case background
         case cardBackground
     }
 
-    private func rowTitle(_ row: Row) -> String {
+    private func rowTitle(_ row: ColorRow) -> String {
         switch row {
         case .accent: return String(localized: "theme.color.accent")
         case .background: return String(localized: "theme.color.background")
@@ -222,27 +310,29 @@ final class CustomThemeViewController: ObservableViewController {
         }
     }
 
-    private func currentHex(section: Section, row: Row) -> String {
+    private func currentHex(section: Section, row: ColorRow) -> String {
         switch (section, row) {
-        case (.light, .accent): return settings.customLightAccentHex
-        case (.light, .background): return settings.customLightBackgroundHex
-        case (.light, .cardBackground): return settings.customLightCardBackgroundHex
-        case (.dark, .accent): return settings.customDarkAccentHex
-        case (.dark, .background): return settings.customDarkBackgroundHex
-        case (.dark, .cardBackground): return settings.customDarkCardBackgroundHex
+        case (.light, .accent): return scheme.lightAccentHex
+        case (.light, .background): return scheme.lightBackgroundHex
+        case (.light, .cardBackground): return scheme.lightCardBackgroundHex
+        case (.dark, .accent): return scheme.darkAccentHex
+        case (.dark, .background): return scheme.darkBackgroundHex
+        case (.dark, .cardBackground): return scheme.darkCardBackgroundHex
+        default: return "007AFF"
         }
     }
 
-    private func setHex(_ hex: String, section: Section, row: Row) {
+    private func setHex(_ hex: String, section: Section, row: ColorRow) {
         switch (section, row) {
-        case (.light, .accent): settings.customLightAccentHex = hex
-        case (.light, .background): settings.customLightBackgroundHex = hex
-        case (.light, .cardBackground): settings.customLightCardBackgroundHex = hex
-        case (.dark, .accent): settings.customDarkAccentHex = hex
-        case (.dark, .background): settings.customDarkBackgroundHex = hex
-        case (.dark, .cardBackground): settings.customDarkCardBackgroundHex = hex
+        case (.light, .accent): scheme.lightAccentHex = hex
+        case (.light, .background): scheme.lightBackgroundHex = hex
+        case (.light, .cardBackground): scheme.lightCardBackgroundHex = hex
+        case (.dark, .accent): scheme.darkAccentHex = hex
+        case (.dark, .background): scheme.darkBackgroundHex = hex
+        case (.dark, .cardBackground): scheme.darkCardBackgroundHex = hex
+        default: break
         }
-        themeManager.notifyChange()
+        tableView.reloadData()
     }
 }
 
@@ -254,11 +344,15 @@ extension CustomThemeViewController: UITableViewDataSource {
     }
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        Row.allCases.count
+        switch Section(rawValue: section)! {
+        case .name: return 1
+        case .light, .dark: return ColorRow.allCases.count
+        }
     }
 
     func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
         switch Section(rawValue: section)! {
+        case .name: return String(localized: "theme.section.name")
         case .light: return String(localized: "theme.section.light")
         case .dark: return String(localized: "theme.section.dark")
         }
@@ -266,24 +360,48 @@ extension CustomThemeViewController: UITableViewDataSource {
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let section = Section(rawValue: indexPath.section)!
-        let row = Row(rawValue: indexPath.row)!
+
+        if section == .name {
+            let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+            cell.backgroundColor = themeManager.cardBackgroundColor
+
+            let textField = UITextField()
+            textField.placeholder = String(localized: "theme.name_placeholder")
+            textField.text = scheme.name
+            textField.translatesAutoresizingMaskIntoConstraints = false
+            textField.clearButtonMode = .whileEditing
+            textField.addAction(UIAction { [weak self] action in
+                let tf = action.sender as! UITextField
+                self?.scheme.name = tf.text ?? ""
+            }, for: .editingChanged)
+
+            cell.contentView.addSubview(textField)
+            NSLayoutConstraint.activate([
+                textField.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 16),
+                textField.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor, constant: -16),
+                textField.topAnchor.constraint(equalTo: cell.contentView.topAnchor, constant: 8),
+                textField.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor, constant: -8),
+                textField.heightAnchor.constraint(greaterThanOrEqualToConstant: 28),
+            ])
+            cell.selectionStyle = .none
+            return cell
+        }
+
+        let row = ColorRow(rawValue: indexPath.row)!
         let hex = currentHex(section: section, row: row)
 
         let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
         cell.textLabel?.text = rowTitle(row)
+        cell.detailTextLabel?.text = "#\(hex)"
+        cell.detailTextLabel?.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
         cell.backgroundColor = themeManager.cardBackgroundColor
 
-        let colorView = UIView()
-        colorView.translatesAutoresizingMaskIntoConstraints = false
+        let colorView = UIView(frame: CGRect(x: 0, y: 0, width: 28, height: 28))
         colorView.backgroundColor = UIColor(hex: hex)
-        colorView.layer.cornerRadius = 12
+        colorView.layer.cornerRadius = 14
         colorView.layer.borderWidth = 1
         colorView.layer.borderColor = UIColor.separator.cgColor
         cell.accessoryView = colorView
-        NSLayoutConstraint.activate([
-            colorView.widthAnchor.constraint(equalToConstant: 24),
-            colorView.heightAnchor.constraint(equalToConstant: 24),
-        ])
 
         return cell
     }
@@ -296,12 +414,14 @@ extension CustomThemeViewController: UITableViewDelegate {
         tableView.deselectRow(at: indexPath, animated: true)
 
         let section = Section(rawValue: indexPath.section)!
-        let row = Row(rawValue: indexPath.row)!
+        guard section != .name else { return }
+
+        let row = ColorRow(rawValue: indexPath.row)!
         let hex = currentHex(section: section, row: row)
 
         let picker = UIColorPickerViewController()
         picker.selectedColor = UIColor(hex: hex) ?? .systemBlue
-        picker.supportsAlpha = false
+        picker.supportsAlpha = true
         picker.title = rowTitle(row)
         picker.delegate = self
         picker.view.tag = indexPath.section * 100 + indexPath.row
@@ -316,12 +436,7 @@ extension CustomThemeViewController: UIColorPickerViewControllerDelegate {
         guard !continuously else { return }
         let tag = viewController.view.tag
         let section = Section(rawValue: tag / 100)!
-        let row = Row(rawValue: tag % 100)!
-
-        // Activate custom theme if not already
-        if settings.selectedThemeId != "custom" {
-            settings.selectedThemeId = "custom"
-        }
+        let row = ColorRow(rawValue: tag % 100)!
 
         setHex(color.hexString, section: section, row: row)
     }

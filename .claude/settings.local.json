@@ -24,25 +24,7 @@
       "Bash(grep:*)",
       "Bash(make generate:*)",
       "Bash(find:*)",
-      "Bash(xargs cat:*)",
-      "Bash(while ! grep -q \"BUILD SUCCEEDED\\\\|BUILD FAILED\" /private/tmp/claude-501/-Users-wxl-Documents-dexo/73790a9c-51c5-4cd1-9548-2a53647c7c5c/tasks/br7rry1pu.output)",
-      "Bash(do sleep:*)",
-      "Bash(done)",
-      "Bash(while ! grep -q \"BUILD SUCCEEDED\\\\|BUILD FAILED\\\\|error:\" /private/tmp/claude-501/-Users-wxl-Documents-dexo/73790a9c-51c5-4cd1-9548-2a53647c7c5c/tasks/bawmbtpgj.output)",
-      "Bash(while ! grep -q 'BUILD SUCCEEDED\\\\|BUILD FAILED\\\\|error:' /private/tmp/claude-501/-Users-wxl-Documents-dexo/73790a9c-51c5-4cd1-9548-2a53647c7c5c/tasks/bjos6ij3f.output)",
-      "Bash(while ! grep -q 'BUILD SUCCEEDED\\\\|BUILD FAILED\\\\|error:' /private/tmp/claude-501/-Users-wxl-Documents-dexo/73790a9c-51c5-4cd1-9548-2a53647c7c5c/tasks/b9scwpfux.output)",
-      "Bash(while ! grep -q 'BUILD SUCCEEDED\\\\|BUILD FAILED\\\\|error:' /private/tmp/claude-501/-Users-wxl-Documents-dexo/73790a9c-51c5-4cd1-9548-2a53647c7c5c/tasks/ble70vi34.output)",
-      "Bash(while ! grep -q 'BUILD SUCCEEDED\\\\|BUILD FAILED\\\\|error:' /private/tmp/claude-501/-Users-wxl-Documents-dexo/73790a9c-51c5-4cd1-9548-2a53647c7c5c/tasks/bxd9km2rl.output)",
-      "Bash(while ! grep -q 'BUILD SUCCEEDED\\\\|BUILD FAILED\\\\|error:' /private/tmp/claude-501/-Users-wxl-Documents-dexo/73790a9c-51c5-4cd1-9548-2a53647c7c5c/tasks/b0z8c02yf.output)",
-      "Bash(while ! grep -q 'BUILD SUCCEEDED\\\\|BUILD FAILED\\\\|error:' /private/tmp/claude-501/-Users-wxl-Documents-dexo/73790a9c-51c5-4cd1-9548-2a53647c7c5c/tasks/b2e3aen6u.output)",
-      "Bash(while ! grep -q 'BUILD SUCCEEDED\\\\|BUILD FAILED\\\\|error:' /private/tmp/claude-501/-Users-wxl-Documents-dexo/73790a9c-51c5-4cd1-9548-2a53647c7c5c/tasks/bn7t9zwjh.output)",
-      "Bash(while ! grep -q 'BUILD SUCCEEDED\\\\|BUILD FAILED\\\\|error:' /private/tmp/claude-501/-Users-wxl-Documents-dexo/73790a9c-51c5-4cd1-9548-2a53647c7c5c/tasks/b52fcudyn.output)",
-      "Bash(while ! grep -q 'BUILD SUCCEEDED\\\\|BUILD FAILED\\\\|error:' /private/tmp/claude-501/-Users-wxl-Documents-dexo/73790a9c-51c5-4cd1-9548-2a53647c7c5c/tasks/bpx5yi9og.output)",
-      "Bash(while ! grep -q 'BUILD SUCCEEDED\\\\|BUILD FAILED\\\\|error:' /private/tmp/claude-501/-Users-wxl-Documents-dexo/73790a9c-51c5-4cd1-9548-2a53647c7c5c/tasks/bow982926.output)",
-      "Bash(while ! grep -q 'Success\\\\|Error\\\\|error' /private/tmp/claude-501/-Users-wxl-Documents-dexo/73790a9c-51c5-4cd1-9548-2a53647c7c5c/tasks/bkgf46j1m.output)",
-      "Bash(while ! grep -q 'BUILD SUCCEEDED\\\\|BUILD FAILED\\\\|error:' /private/tmp/claude-501/-Users-wxl-Documents-dexo/73790a9c-51c5-4cd1-9548-2a53647c7c5c/tasks/b68vz6c05.output)",
-      "Bash(while ! grep -q 'BUILD SUCCEEDED\\\\|BUILD FAILED\\\\|error:' /private/tmp/claude-501/-Users-wxl-Documents-dexo/73790a9c-51c5-4cd1-9548-2a53647c7c5c/tasks/b1rbsbt16.output)",
-      "Bash(while ! grep -q 'BUILD SUCCEEDED\\\\|BUILD FAILED\\\\|error:' /private/tmp/claude-501/-Users-wxl-Documents-dexo/73790a9c-51c5-4cd1-9548-2a53647c7c5c/tasks/b308ioxjq.output)"
+      "Bash(xargs cat:*)"
     ]
   }
 }

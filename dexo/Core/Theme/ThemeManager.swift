@@ -84,6 +84,52 @@ extension ThemeDefinition {
     ]
 }
 
+// MARK: - Custom Theme Scheme
+
+struct CustomThemeScheme: Codable, Identifiable, Equatable {
+    let id: String
+    var name: String
+    var lightAccentHex: String
+    var darkAccentHex: String
+    var lightBackgroundHex: String
+    var darkBackgroundHex: String
+    var lightCardBackgroundHex: String
+    var darkCardBackgroundHex: String
+
+    init(
+        id: String = UUID().uuidString,
+        name: String = "",
+        lightAccentHex: String = "007AFF",
+        darkAccentHex: String = "0A84FF",
+        lightBackgroundHex: String = "F2F2F7",
+        darkBackgroundHex: String = "000000",
+        lightCardBackgroundHex: String = "FFFFFF",
+        darkCardBackgroundHex: String = "1C1C1E"
+    ) {
+        self.id = id
+        self.name = name
+        self.lightAccentHex = lightAccentHex
+        self.darkAccentHex = darkAccentHex
+        self.lightBackgroundHex = lightBackgroundHex
+        self.darkBackgroundHex = darkBackgroundHex
+        self.lightCardBackgroundHex = lightCardBackgroundHex
+        self.darkCardBackgroundHex = darkCardBackgroundHex
+    }
+
+    func toThemeDefinition() -> ThemeDefinition {
+        ThemeDefinition(
+            id: "custom_\(id)",
+            name: name,
+            lightAccentHex: lightAccentHex,
+            darkAccentHex: darkAccentHex,
+            lightBackgroundHex: lightBackgroundHex,
+            darkBackgroundHex: darkBackgroundHex,
+            lightCardBackgroundHex: lightCardBackgroundHex,
+            darkCardBackgroundHex: darkCardBackgroundHex
+        )
+    }
+}
+
 // MARK: - Theme Manager
 
 @Observable
@@ -98,19 +144,14 @@ final class ThemeManager {
 
     var currentTheme: ThemeDefinition {
         _ = revision
-        if settings.selectedThemeId == "custom" {
-            return ThemeDefinition(
-                id: "custom",
-                name: String(localized: "theme.custom"),
-                lightAccentHex: settings.customLightAccentHex,
-                darkAccentHex: settings.customDarkAccentHex,
-                lightBackgroundHex: settings.customLightBackgroundHex,
-                darkBackgroundHex: settings.customDarkBackgroundHex,
-                lightCardBackgroundHex: settings.customLightCardBackgroundHex,
-                darkCardBackgroundHex: settings.customDarkCardBackgroundHex
-            )
+        let selectedId = settings.selectedThemeId
+        if selectedId.hasPrefix("custom_") {
+            let schemeId = String(selectedId.dropFirst("custom_".count))
+            if let scheme = settings.customThemeScheme(id: schemeId) {
+                return scheme.toThemeDefinition()
+            }
         }
-        return ThemeDefinition.presets.first { $0.id == settings.selectedThemeId }
+        return ThemeDefinition.presets.first { $0.id == selectedId }
             ?? ThemeDefinition.presets[0]
     }
 
@@ -192,19 +233,35 @@ final class ThemeManager {
 // MARK: - UIColor + Hex
 
 extension UIColor {
+    /// Accepts 6-char (RRGGBB) or 8-char (RRGGBBAA) hex strings.
     convenience init?(hex: String) {
         let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        guard hex.count == 6, let int = UInt64(hex, radix: 16) else { return nil }
-        let r = CGFloat((int >> 16) & 0xFF) / 255
-        let g = CGFloat((int >> 8) & 0xFF) / 255
-        let b = CGFloat(int & 0xFF) / 255
-        self.init(red: r, green: g, blue: b, alpha: 1)
+        guard let int = UInt64(hex, radix: 16) else { return nil }
+        switch hex.count {
+        case 6:
+            let r = CGFloat((int >> 16) & 0xFF) / 255
+            let g = CGFloat((int >> 8) & 0xFF) / 255
+            let b = CGFloat(int & 0xFF) / 255
+            self.init(red: r, green: g, blue: b, alpha: 1)
+        case 8:
+            let r = CGFloat((int >> 24) & 0xFF) / 255
+            let g = CGFloat((int >> 16) & 0xFF) / 255
+            let b = CGFloat((int >> 8) & 0xFF) / 255
+            let a = CGFloat(int & 0xFF) / 255
+            self.init(red: r, green: g, blue: b, alpha: a)
+        default:
+            return nil
+        }
     }
 
+    /// Returns RRGGBB when fully opaque, RRGGBBAA when translucent.
     var hexString: String {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         getRed(&r, green: &g, blue: &b, alpha: &a)
-        return String(format: "%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255))
+        if a >= 0.999 {
+            return String(format: "%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255))
+        }
+        return String(format: "%02X%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255), Int(a * 255))
     }
 
     /// Blend `self` into `base` at the given ratio (0 = all base, 1 = all self).

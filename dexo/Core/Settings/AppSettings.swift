@@ -81,34 +81,38 @@ final class AppSettings {
         set { defaults.set(newValue, forKey: "selectedThemeId") }
     }
 
-    var customLightAccentHex: String {
-        get { defaults.string(forKey: "customLightAccentHex") ?? "007AFF" }
-        set { defaults.set(newValue, forKey: "customLightAccentHex") }
+    var customThemeSchemes: [CustomThemeScheme] {
+        get {
+            guard let data = defaults.data(forKey: "customThemeSchemes"),
+                  let schemes = try? JSONDecoder().decode([CustomThemeScheme].self, from: data)
+            else { return [] }
+            return schemes
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue) {
+                defaults.set(data, forKey: "customThemeSchemes")
+            }
+        }
     }
 
-    var customDarkAccentHex: String {
-        get { defaults.string(forKey: "customDarkAccentHex") ?? "0A84FF" }
-        set { defaults.set(newValue, forKey: "customDarkAccentHex") }
+    func customThemeScheme(id: String) -> CustomThemeScheme? {
+        customThemeSchemes.first { $0.id == id }
     }
 
-    var customLightBackgroundHex: String {
-        get { defaults.string(forKey: "customLightBackgroundHex") ?? "F2F2F7" }
-        set { defaults.set(newValue, forKey: "customLightBackgroundHex") }
+    func saveCustomThemeScheme(_ scheme: CustomThemeScheme) {
+        var schemes = customThemeSchemes
+        if let idx = schemes.firstIndex(where: { $0.id == scheme.id }) {
+            schemes[idx] = scheme
+        } else {
+            schemes.append(scheme)
+        }
+        customThemeSchemes = schemes
     }
 
-    var customDarkBackgroundHex: String {
-        get { defaults.string(forKey: "customDarkBackgroundHex") ?? "000000" }
-        set { defaults.set(newValue, forKey: "customDarkBackgroundHex") }
-    }
-
-    var customLightCardBackgroundHex: String {
-        get { defaults.string(forKey: "customLightCardBackgroundHex") ?? "FFFFFF" }
-        set { defaults.set(newValue, forKey: "customLightCardBackgroundHex") }
-    }
-
-    var customDarkCardBackgroundHex: String {
-        get { defaults.string(forKey: "customDarkCardBackgroundHex") ?? "1C1C1E" }
-        set { defaults.set(newValue, forKey: "customDarkCardBackgroundHex") }
+    func deleteCustomThemeScheme(id: String) {
+        var schemes = customThemeSchemes
+        schemes.removeAll { $0.id == id }
+        customThemeSchemes = schemes
     }
 
     // MARK: - DNS over HTTPS

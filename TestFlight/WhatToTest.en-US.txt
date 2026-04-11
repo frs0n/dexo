@@ -1,4 +1,4 @@
 What to Test
 
-- fix boost
-- fix search result
+- Fix web login session being lost under weak network conditions
+- Clean up composer text view background

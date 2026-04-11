@@ -289,6 +289,22 @@
         }
       }
     },
+    "compose.draft.save" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save Draft"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存草稿"
+          }
+        }
+      }
+    },
     "compose.send" : {
       "localizations" : {
         "en" : {

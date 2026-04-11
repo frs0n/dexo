@@ -53,6 +53,8 @@ final class UserPostsViewController: ObservableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        // Hide the plain-style table's top hairline (same trick used by HomeViewController).
+        tableView.tableHeaderView = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: CGFloat.leastNormalMagnitude))
         view.addSubview(tableView)
         view.addSubview(activityIndicator)
         view.addSubview(emptyLabel)

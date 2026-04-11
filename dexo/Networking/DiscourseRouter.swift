@@ -89,9 +89,9 @@ enum DiscourseRouter {
         case .tagSearch(let query, let categoryId):
             let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
             var path = "/tags/filter/search?q=\(encoded)&limit=5"
-            //            if let categoryId {
-            //                path += "&categoryId=\(categoryId)"
-            //            }
+            if let categoryId {
+                path += "&categoryId=\(categoryId)&filterForInput=true"
+            }
             return path
         case .bookmarks(let username):
             return "/u/\(username)/bookmarks.json"

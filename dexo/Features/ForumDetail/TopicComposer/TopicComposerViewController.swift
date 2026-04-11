@@ -84,6 +84,9 @@ final class TopicComposerViewController: ObservableViewController {
 
     private var tagSearchDebounceTask: Task<Void, Never>?
     private var tagSuggestionsTopConstraint: NSLayoutConstraint?
+    /// Category id from a restored draft waiting for `loadCategories()` to finish
+    /// so we can resolve it to the concrete `DiscourseCategory`.
+    private var pendingDraftCategoryId: Int?
 
     private let bodyTextView: UITextView = {
         let tv = UITextView()
@@ -166,8 +169,15 @@ final class TopicComposerViewController: ObservableViewController {
         titleField.addTarget(self, action: #selector(titleChanged), for: .editingChanged)
         tagField.addTarget(self, action: #selector(tagFieldChanged), for: .editingChanged)
 
+        restoreDraftIfAny()
+
         Task {
             await viewModel.loadCategories()
+            // Resolve the category the draft was composed against once categories are available.
+            if let id = pendingDraftCategoryId, let match = viewModel.findCategory(id: id) {
+                viewModel.selectedCategory = match
+            }
+            pendingDraftCategoryId = nil
         }
     }
 
@@ -295,6 +305,7 @@ final class TopicComposerViewController: ObservableViewController {
             let catImage = Self.colorDotImage(color: catColor)
             let catAction = UIAction(title: cat.name, image: catImage, state: state) { [weak self] _ in
                 self?.viewModel.selectedCategory = cat
+                self?.refreshTagSuggestionsIfNeeded()
             }
             if let subs = cat.subcategoryList, !subs.isEmpty {
                 var groupChildren: [UIMenuElement] = [catAction]
@@ -304,6 +315,7 @@ final class TopicComposerViewController: ObservableViewController {
                     let subImage = Self.colorDotImage(color: subColor)
                     let subAction = UIAction(title: sub.name, image: subImage, state: subState) { [weak self] _ in
                         self?.viewModel.selectedCategory = sub
+                        self?.refreshTagSuggestionsIfNeeded()
                     }
                     groupChildren.append(subAction)
                 }
@@ -340,12 +352,18 @@ final class TopicComposerViewController: ObservableViewController {
                 message: String(localized: "compose.discard.message"),
                 preferredStyle: .alert
             )
+            alert.addAction(UIAlertAction(title: String(localized: "compose.draft.save"), style: .default) { [weak self] _ in
+                self?.viewModel.saveDraft()
+                self?.dismiss(animated: true)
+            })
             alert.addAction(UIAlertAction(title: String(localized: "compose.discard.action"), style: .destructive) { [weak self] _ in
+                self?.viewModel.clearDraft()
                 self?.dismiss(animated: true)
             })
             alert.addAction(UIAlertAction(title: String(localized: "action.cancel"), style: .cancel))
             present(alert, animated: true)
         } else {
+            viewModel.clearDraft()
             dismiss(animated: true)
         }
     }
@@ -358,10 +376,13 @@ final class TopicComposerViewController: ObservableViewController {
         Task {
             do {
                 let topicId = try await viewModel.submit()
+                viewModel.clearDraft()
                 dismiss(animated: true) { [weak self] in
                     self?.onTopicCreated?(topicId)
                 }
             } catch {
+                // Auto-save so the user doesn't lose their post when the network flakes.
+                viewModel.saveDraft()
                 sendButton.isEnabled = true
                 bodyTextView.isEditable = true
                 titleField.isEnabled = true
@@ -383,7 +404,10 @@ final class TopicComposerViewController: ObservableViewController {
     @objc private func tagFieldChanged() {
         let query = tagField.text ?? ""
         tagSearchDebounceTask?.cancel()
-        if query.trimmingCharacters(in: .whitespaces).isEmpty {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        // With a category selected we always query (empty q returns top-5 tags for that category);
+        // without one we only search after the user types something.
+        if trimmed.isEmpty, viewModel.selectedCategory == nil {
             viewModel.tagSuggestions = []
             return
         }
@@ -392,6 +416,30 @@ final class TopicComposerViewController: ObservableViewController {
             guard !Task.isCancelled else { return }
             await viewModel.searchTags(query: query)
         }
+    }
+
+    private func refreshTagSuggestionsIfNeeded() {
+        guard tagField.isFirstResponder else { return }
+        tagSearchDebounceTask?.cancel()
+        let query = tagField.text ?? ""
+        tagSearchDebounceTask = Task {
+            await viewModel.searchTags(query: query)
+        }
+    }
+
+    // MARK: - Draft
+
+    private func restoreDraftIfAny() {
+        guard let draft = viewModel.loadDraft() else { return }
+        viewModel.title = draft.title
+        viewModel.body = draft.body
+        viewModel.selectedTags = draft.tags
+        // The UI fields aren't observable — populate them directly.
+        titleField.text = draft.title
+        bodyTextView.text = draft.body
+        bodyPlaceholder.isHidden = !draft.body.isEmpty
+        // Category must wait until categories are fetched.
+        pendingDraftCategoryId = draft.categoryId
     }
 
     // MARK: - Tag Chips & Suggestions
@@ -450,11 +498,25 @@ final class TopicComposerViewController: ObservableViewController {
         guard !viewModel.selectedTags.contains(tag) else { return }
         viewModel.selectedTags.append(tag)
         tagField.text = ""
-        viewModel.tagSuggestions = []
+        // Keep the suggestions list open so the user can keep picking more tags.
+        if viewModel.selectedCategory != nil {
+            tagSearchDebounceTask?.cancel()
+            tagSearchDebounceTask = Task { [weak self] in
+                await self?.viewModel.searchTags(query: "")
+            }
+        } else {
+            viewModel.tagSuggestions = []
+        }
+    }
+
+    /// Suggestions with already-picked tags hidden, so tapping one never re-adds it
+    /// and the list shrinks naturally as the user selects.
+    private var displayedTagSuggestions: [DiscourseTag] {
+        viewModel.tagSuggestions.filter { !viewModel.selectedTags.contains($0.text) }
     }
 
     private func updateTagSuggestions() {
-        let hasSuggestions = !viewModel.tagSuggestions.isEmpty
+        let hasSuggestions = !displayedTagSuggestions.isEmpty
         tagSuggestionsTable.isHidden = !hasSuggestions
         if hasSuggestions {
             tagSuggestionsTable.reloadData()
@@ -687,18 +749,25 @@ extension TopicComposerViewController: UITextFieldDelegate {
         }
         return true
     }
+
+    func textFieldDidBeginEditing(_ textField: UITextField) {
+        // When the tag field gains focus and a category is selected, prefetch
+        // the top tags scoped to that category so the user can pick without typing.
+        guard textField === tagField, viewModel.selectedCategory != nil else { return }
+        refreshTagSuggestionsIfNeeded()
+    }
 }
 
 // MARK: - UITableViewDataSource & Delegate (Tag Suggestions)
 
 extension TopicComposerViewController: UITableViewDataSource, UITableViewDelegate {
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        viewModel.tagSuggestions.count
+        displayedTagSuggestions.count
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "TagCell", for: indexPath)
-        let tag = viewModel.tagSuggestions[indexPath.row]
+        let tag = displayedTagSuggestions[indexPath.row]
         var content = cell.defaultContentConfiguration()
         content.text = tag.text
         content.secondaryText = "\(tag.count)"
@@ -712,7 +781,7 @@ extension TopicComposerViewController: UITableViewDataSource, UITableViewDelegat
 
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        let tag = viewModel.tagSuggestions[indexPath.row]
+        let tag = displayedTagSuggestions[indexPath.row]
         selectTag(tag.text)
     }
 }

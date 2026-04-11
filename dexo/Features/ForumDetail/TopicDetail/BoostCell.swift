@@ -113,10 +113,15 @@ final class BoostCell: UITableViewCell {
             appendItem(chipView, size: size)
         }
 
-        let actionChipView = BoostActionChipView()
-        actionChipView.configure(post: post, delegate: delegate)
-        let size = actionChipView.sizeThatFits(CGSize(width: maxRowWidth, height: .greatestFiniteMagnitude))
-        appendItem(actionChipView, size: size)
+        // Hide the "publish a boost" chip when the user can't boost (e.g. they've
+        // already boosted this post — one per user). The expanded list still shows
+        // so they can view or delete existing boosts.
+        if post.canBoost {
+            let actionChipView = BoostActionChipView()
+            actionChipView.configure(post: post, delegate: delegate)
+            let size = actionChipView.sizeThatFits(CGSize(width: maxRowWidth, height: .greatestFiniteMagnitude))
+            appendItem(actionChipView, size: size)
+        }
 
         appendRow()
     }

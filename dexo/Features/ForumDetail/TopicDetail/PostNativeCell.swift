@@ -401,8 +401,11 @@ final class PostNativeCell: UITableViewCell {
         boostButton.setImage(UIImage(systemName: boostIcon, withConfiguration: boostConfig), for: .normal)
         boostButton.setTitle(boostCount > 0 ? " \(boostCount)" : nil, for: .normal)
         boostButton.tintColor = hasMine ? .systemYellow : .tertiaryLabel
+        // Keep the button tappable when existing boosts are present (e.g. the user has
+        // already boosted this post — one per user — and wants to expand the list to
+        // inspect/delete theirs) even though `canBoost` is false in that case.
         boostButton.isHidden = !post.canBoost && boostCount == 0
-        boostButton.isEnabled = post.canBoost
+        boostButton.isEnabled = post.canBoost || boostCount > 0
 
         // Bookmark
         let bookmarkSymbol = post.bookmarked ? "bookmark.fill" : "bookmark"

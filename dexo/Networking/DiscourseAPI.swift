@@ -276,7 +276,11 @@ final class DiscourseAPI {
         if let newToken = response.response?.value(forHTTPHeaderField: "X-CSRF-Token") {
             interceptor.updateCSRFToken(newToken)
         }
+        // Only merge Set-Cookie on successful responses. On weak networks, error responses
+        // (proxy 5xx, partial replies, session-expired 403s) can carry Set-Cookie directives
+        // that would clobber the `_t` session cookie and log the user out silently.
         if let httpResponse = response.response, let url = httpResponse.url,
+           let statusCode = response.response?.statusCode, (200 ..< 300).contains(statusCode),
            KeychainHelper.getUserApiKey(for: baseURL) == AuthManager.webAuthSentinel {
             WebCookieStore.shared.mergeResponseHeaders(httpResponse.allHeaderFields, for: url)
         }

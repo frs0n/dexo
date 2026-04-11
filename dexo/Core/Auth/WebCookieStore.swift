@@ -29,18 +29,29 @@ final class WebCookieStore {
     // MARK: - Read / Write
 
     func setCookies(_ cookies: [HTTPCookie]) {
+        let now = Date()
         lock.lock()
-        for c in cookies { jar[key(for: c)] = c }
+        for c in cookies {
+            // Drop already-expired cookies instead of letting them overwrite a still-valid entry.
+            if let expires = c.expiresDate, expires <= now {
+                jar.removeValue(forKey: key(for: c))
+            } else {
+                jar[key(for: c)] = c
+            }
+        }
         lock.unlock()
         save()
     }
 
     func cookies(for url: URL) -> [HTTPCookie] {
+        let now = Date()
         lock.lock()
         defer { lock.unlock() }
         guard let host = url.host?.lowercased() else { return [] }
         let path = url.path.isEmpty ? "/" : url.path
         return jar.values.filter { cookie in
+            // Skip expired cookies so a stale/expired `_t` left in the jar never gets sent.
+            if let expires = cookie.expiresDate, expires <= now { return false }
             let domain = cookie.domain.lowercased()
             let domainMatch = host == domain
                 || (domain.hasPrefix(".") && (host == String(domain.dropFirst()) || host.hasSuffix(domain)))

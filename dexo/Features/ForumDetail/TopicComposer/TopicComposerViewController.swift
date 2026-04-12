@@ -77,7 +77,8 @@ final class TopicComposerViewController: ObservableViewController {
         tv.register(UITableViewCell.self, forCellReuseIdentifier: "TagCell")
         tv.delegate = self
         tv.dataSource = self
-        tv.rowHeight = 40
+        tv.rowHeight = UITableView.automaticDimension
+        tv.estimatedRowHeight = 44
         tv.separatorInset = UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 16)
         tv.layer.borderColor = UIColor.separator.cgColor
         tv.layer.borderWidth = 0.5
@@ -127,6 +128,28 @@ final class TopicComposerViewController: ObservableViewController {
 
     private lazy var sendButton: UIBarButtonItem = {
         UIBarButtonItem(title: String(localized: "compose.send"), style: .done, target: self, action: #selector(sendTapped))
+    }()
+
+    private lazy var sendSpinner: UIBarButtonItem = {
+        let spinner = UIActivityIndicatorView(style: .medium)
+        spinner.startAnimating()
+        return UIBarButtonItem(customView: spinner)
+    }()
+
+    private lazy var uploadOverlay: UIView = {
+        let overlay = UIView()
+        overlay.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.6)
+        overlay.translatesAutoresizingMaskIntoConstraints = false
+        overlay.isHidden = true
+        let spinner = UIActivityIndicatorView(style: .medium)
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        spinner.startAnimating()
+        overlay.addSubview(spinner)
+        NSLayoutConstraint.activate([
+            spinner.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
+        ])
+        return overlay
     }()
 
     private func makeSeparator() -> UIView {
@@ -210,6 +233,7 @@ final class TopicComposerViewController: ObservableViewController {
         view.addSubview(headerStack)
         view.addSubview(bodyTextView)
         view.addSubview(bodyPlaceholder)
+        view.addSubview(uploadOverlay)
         view.addSubview(tagSuggestionsTable)
 
         let titleHeight: CGFloat = 48
@@ -233,6 +257,11 @@ final class TopicComposerViewController: ObservableViewController {
             bodyTextView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             bodyTextView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             bodyTextView.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
+
+            uploadOverlay.topAnchor.constraint(equalTo: bodyTextView.topAnchor),
+            uploadOverlay.leadingAnchor.constraint(equalTo: bodyTextView.leadingAnchor),
+            uploadOverlay.trailingAnchor.constraint(equalTo: bodyTextView.trailingAnchor),
+            uploadOverlay.bottomAnchor.constraint(equalTo: bodyTextView.bottomAnchor),
 
             bodyPlaceholder.topAnchor.constraint(equalTo: bodyTextView.topAnchor, constant: 12),
             bodyPlaceholder.leadingAnchor.constraint(equalTo: bodyTextView.leadingAnchor, constant: 13),
@@ -372,7 +401,7 @@ final class TopicComposerViewController: ObservableViewController {
     }
 
     @objc private func sendTapped() {
-        sendButton.isEnabled = false
+        navigationItem.rightBarButtonItem = sendSpinner
         bodyTextView.isEditable = false
         titleField.isEnabled = false
 
@@ -386,6 +415,7 @@ final class TopicComposerViewController: ObservableViewController {
             } catch {
                 // Auto-save so the user doesn't lose their post when the network flakes.
                 viewModel.saveDraft()
+                navigationItem.rightBarButtonItem = sendButton
                 sendButton.isEnabled = true
                 bodyTextView.isEditable = true
                 titleField.isEnabled = true
@@ -680,6 +710,11 @@ final class TopicComposerViewController: ObservableViewController {
         bodyTextView.replace(insertRange, withText: placeholder)
         textViewDidChange(bodyTextView)
 
+        // Prevent edits while the upload is in flight so the placeholder stays intact.
+        bodyTextView.isEditable = false
+        bodyTextView.textColor = .placeholderText
+        uploadOverlay.isHidden = false
+
         Task {
             do {
                 let response = try await viewModel.uploadImage(data: data, filename: filename)
@@ -711,6 +746,9 @@ final class TopicComposerViewController: ObservableViewController {
                 alert.addAction(UIAlertAction(title: "OK", style: .default))
                 present(alert, animated: true)
             }
+            bodyTextView.isEditable = true
+            bodyTextView.textColor = .label
+            uploadOverlay.isHidden = true
         }
     }
 

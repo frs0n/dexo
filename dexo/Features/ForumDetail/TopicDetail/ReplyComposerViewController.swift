@@ -76,6 +76,12 @@ final class ReplyComposerViewController: BaseViewController {
         UIBarButtonItem(title: String(localized: "reply.send"), style: .done, target: self, action: #selector(sendTapped))
     }()
 
+    private lazy var sendSpinner: UIBarButtonItem = {
+        let spinner = UIActivityIndicatorView(style: .medium)
+        spinner.startAnimating()
+        return UIBarButtonItem(customView: spinner)
+    }()
+
     init(api: DiscourseAPI, topicId: Int, replyToPost: DiscourseTopicDetail.Post?, baseURL: String) {
         self.api = api
         self.topicId = topicId
@@ -195,7 +201,7 @@ final class ReplyComposerViewController: BaseViewController {
         let raw = textView.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !raw.isEmpty else { return }
 
-        sendButton.isEnabled = false
+        navigationItem.rightBarButtonItem = sendSpinner
         textView.isEditable = false
 
         Task {
@@ -209,6 +215,7 @@ final class ReplyComposerViewController: BaseViewController {
                     self?.onPostCreated?()
                 }
             } catch {
+                navigationItem.rightBarButtonItem = sendButton
                 sendButton.isEnabled = true
                 textView.isEditable = true
                 let alert = UIAlertController(

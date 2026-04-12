@@ -18,6 +18,8 @@ final class MarkdownToolbarView: UIView {
     private let scrollView: UIScrollView = {
         let sv = UIScrollView()
         sv.showsHorizontalScrollIndicator = false
+        sv.showsVerticalScrollIndicator = false
+        sv.bounces = false
         sv.translatesAutoresizingMaskIntoConstraints = false
         return sv
     }()

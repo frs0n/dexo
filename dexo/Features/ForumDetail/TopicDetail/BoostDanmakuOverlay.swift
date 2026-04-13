@@ -1,0 +1,245 @@
+import CookedHTML
+import DanmakuKit
+import SDWebImage
+import UIKit
+
+// MARK: - Cell Model
+
+final class BoostDanmakuCellModel: DanmakuCellModel {
+    var identifier = ""
+    var boost: DiscourseTopicDetail.Boost?
+    var assetBaseURL = ""
+
+    var cellClass: DanmakuCell.Type { BoostDanmakuCell.self }
+    var size: CGSize = .zero
+    var track: UInt?
+    var displayTime: Double = 6
+    var type: DanmakuCellType = .floating
+
+    func isEqual(to cellModel: DanmakuCellModel) -> Bool {
+        identifier == cellModel.identifier
+    }
+}
+
+// MARK: - Cell
+
+final class BoostDanmakuCell: DanmakuCell {
+    private enum Layout {
+        static let horizontalPadding: CGFloat = 2
+        static let trailingPadding: CGFloat = 8
+        static let avatarSize: CGFloat = 20
+        static let textSpacing: CGFloat = 5
+        static let minimumTextWidth: CGFloat = 10
+        static let minimumChipHeight: CGFloat = 26
+    }
+
+    private let textFont = UIFont.systemFont(ofSize: 13)
+
+    private let avatarImageView: UIImageView = {
+        let iv = UIImageView()
+        iv.contentMode = .scaleAspectFill
+        iv.clipsToBounds = true
+        iv.layer.cornerRadius = Layout.avatarSize / 2
+        iv.layer.borderWidth = 1.5
+        iv.layer.borderColor = UIColor.systemBackground.cgColor
+        iv.backgroundColor = .secondarySystemBackground
+        return iv
+    }()
+
+    private let textView: UITextView = {
+        let tv = UITextView()
+        tv.isEditable = false
+        tv.isScrollEnabled = false
+        tv.isUserInteractionEnabled = false
+        tv.textContainerInset = .zero
+        tv.textContainer.lineFragmentPadding = 0
+        tv.textContainer.maximumNumberOfLines = 1
+        tv.textContainer.lineBreakMode = .byTruncatingTail
+        tv.backgroundColor = .clear
+        return tv
+    }()
+
+    required init(frame: CGRect) {
+        super.init(frame: frame)
+        displayAsync = false
+        backgroundColor = .secondarySystemBackground
+        addSubview(avatarImageView)
+        addSubview(textView)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func willDisplay() {
+        guard let model = model as? BoostDanmakuCellModel,
+              let boost = model.boost else { return }
+
+        let baseURL = model.assetBaseURL
+
+        // Avatar
+        let sizedAvatar = boost.user.avatarTemplate?.replacingOccurrences(of: "{size}", with: "48")
+        if let sizedAvatar {
+            let urlString = sizedAvatar.hasPrefix("http") ? sizedAvatar : baseURL + sizedAvatar
+            if let url = URL(string: urlString) {
+                avatarImageView.sd_setImage(with: url)
+            }
+        }
+
+        // Text
+        let inlineNodes = Self.inlineNodes(from: boost.cooked, baseURL: baseURL)
+        let attributedText = inlineNodes.attributedString(
+            config: AttributedStringConfig(
+                baseFont: textFont,
+                baseColor: .label,
+                linkColor: .link,
+                codeFont: .monospacedSystemFont(ofSize: textFont.pointSize, weight: .regular),
+                codeBackgroundColor: .secondarySystemBackground
+            )
+        )
+        textView.attributedText = attributedText
+        loadInlineImages(in: textView)
+
+        layer.cornerRadius = bounds.height / 2
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+
+        let avatarY = (bounds.height - Layout.avatarSize) / 2
+        avatarImageView.frame = CGRect(
+            x: Layout.horizontalPadding, y: avatarY,
+            width: Layout.avatarSize, height: Layout.avatarSize
+        )
+
+        let textX = avatarImageView.frame.maxX + Layout.textSpacing
+        let textWidth = max(Layout.minimumTextWidth, bounds.width - textX - Layout.trailingPadding)
+        let textHeight = max(ceil(textFont.lineHeight),
+                             ceil(textView.sizeThatFits(CGSize(width: textWidth, height: .greatestFiniteMagnitude)).height))
+        textView.frame = CGRect(
+            x: textX,
+            y: (bounds.height - textHeight) / 2,
+            width: textWidth,
+            height: textHeight
+        )
+    }
+
+    // MARK: - Helpers
+
+    static func inlineNodes(from cooked: String, baseURL: String) -> [InlineNode] {
+        let blocks = CookedHTMLParser.parse(html: cooked, baseURL: baseURL)
+        guard let first = blocks.first else { return [.text("")] }
+        switch first {
+        case .paragraph(let inlines) where !inlines.isEmpty:
+            return inlines.flatMap { node -> [InlineNode] in
+                node == .lineBreak ? [.text(" ")] : [node]
+            }.trimmedWhitespace()
+        case .image(let src, let alt, let width, let height, _):
+            return [.image(src: src, alt: alt, width: width, height: height, isEmoji: true)]
+        default:
+            return [.text("")]
+        }
+    }
+
+    private func loadInlineImages(in textView: UITextView) {
+        guard let attributedText = textView.attributedText else { return }
+        let fullRange = NSRange(location: 0, length: attributedText.length)
+
+        var entries: [(attachment: NSTextAttachment, location: Int, url: URL)] = []
+        attributedText.enumerateAttribute(.cookedHTMLImageURL, in: fullRange) { value, range, _ in
+            guard let urlString = value as? String,
+                  let url = URL(string: urlString) else { return }
+            for i in 0 ..< range.length {
+                let loc = range.location + i
+                if let attachment = attributedText.attribute(.attachment, at: loc, effectiveRange: nil) as? NSTextAttachment {
+                    entries.append((attachment, loc, url))
+                }
+            }
+        }
+
+        for entry in entries {
+            SDWebImageManager.shared.loadImage(with: entry.url, progress: nil) { [weak textView] image, _, _, _, _, _ in
+                guard let textView, let image else { return }
+                entry.attachment.image = image
+                textView.textStorage.edited(.editedAttributes, range: NSRange(location: entry.location, length: 1), changeInLength: 0)
+            }
+        }
+    }
+}
+
+// MARK: - Overlay
+
+final class BoostDanmakuOverlay {
+    private weak var hostView: UIView?
+    private var danmakuView: DanmakuView?
+    private var cleanupToken = 0
+
+    init(hostView: UIView) {
+        self.hostView = hostView
+    }
+
+    func shoot(boosts: [DiscourseTopicDetail.Boost], assetBaseURL: String, top: CGFloat, bottom: CGFloat) {
+        guard let hostView, !boosts.isEmpty else { return }
+
+        // Clear any running danmaku first
+        stop()
+        cleanupToken += 1
+
+        let frame = CGRect(x: 0, y: top, width: hostView.bounds.width, height: bottom - top)
+
+        let dv = DanmakuView(frame: frame)
+        dv.isUserInteractionEnabled = false
+        dv.backgroundColor = .clear
+        hostView.addSubview(dv)
+        danmakuView = dv
+        dv.play()
+
+        let textFont = UIFont.systemFont(ofSize: 13)
+        for (i, boost) in boosts.enumerated() {
+            let model = BoostDanmakuCellModel()
+            model.identifier = "\(boost.id)"
+            model.boost = boost
+            model.assetBaseURL = assetBaseURL
+            model.size = Self.chipSize(for: boost, font: textFont, baseURL: assetBaseURL)
+
+            let delay = Double(i) * 0.4
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.danmakuView?.shoot(danmaku: model)
+            }
+        }
+
+        let token = cleanupToken
+        let totalDuration = Double(boosts.count) * 0.4 + 7
+        DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration) { [weak self] in
+            guard let self, self.cleanupToken == token else { return }
+            self.stop()
+        }
+    }
+
+    func stop() {
+        danmakuView?.stop()
+        danmakuView?.removeFromSuperview()
+        danmakuView = nil
+    }
+
+    private static func chipSize(for boost: DiscourseTopicDetail.Boost, font: UIFont, baseURL: String) -> CGSize {
+        let inlineNodes = BoostDanmakuCell.inlineNodes(from: boost.cooked, baseURL: baseURL)
+        let attr = inlineNodes.attributedString(
+            config: AttributedStringConfig(
+                baseFont: font,
+                baseColor: .label,
+                linkColor: .link,
+                codeFont: .monospacedSystemFont(ofSize: font.pointSize, weight: .regular),
+                codeBackgroundColor: .secondarySystemBackground
+            )
+        )
+        let textSize = attr.boundingRect(
+            with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: 26),
+            options: .usesLineFragmentOrigin,
+            context: nil
+        ).size
+        let width = 2 + 20 + 5 + ceil(textSize.width) + 8
+        let height = max(26.0, max(20, ceil(textSize.height)) + 4)
+        return CGSize(width: width, height: height)
+    }
+}

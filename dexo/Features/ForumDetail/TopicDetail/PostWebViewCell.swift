@@ -11,7 +11,7 @@ protocol PostCellDelegate: AnyObject {
     func postCell(didTapReaction reactionId: String, forPost post: DiscourseTopicDetail.Post)
     func postCell(didTapBoostForPost post: DiscourseTopicDetail.Post)
     func postCell(didTapDeleteBoost boost: DiscourseTopicDetail.Boost)
-    func postCell(didTapToggleBoostsForPost post: DiscourseTopicDetail.Post)
+    func postCell(didTapToggleBoostsForPost post: DiscourseTopicDetail.Post, sourceView: UIView)
     func postCell(didVotePoll pollName: String, options: [String], forPost post: DiscourseTopicDetail.Post)
     func postCell(didRemovePollVote pollName: String, forPost post: DiscourseTopicDetail.Post)
 }

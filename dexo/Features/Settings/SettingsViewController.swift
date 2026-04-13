@@ -77,7 +77,7 @@ extension SettingsViewController: UITableViewDataSource {
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         switch visibleSections[section] {
-        case .general: return 1
+        case .general: return 2
         case .appearance: return 2
         case .network: return networkRows().count
         #if DEBUG
@@ -100,7 +100,11 @@ extension SettingsViewController: UITableViewDataSource {
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         switch visibleSections[indexPath.section] {
         case .general:
-            return makeAutoOpenCell(tableView, indexPath: indexPath)
+            if indexPath.row == 0 {
+                return makeAutoOpenCell(tableView, indexPath: indexPath)
+            } else {
+                return makeBoostDisplayCell(tableView, indexPath: indexPath)
+            }
         case .appearance:
             if indexPath.row == 0 {
                 return makeAppearanceCell(tableView, indexPath: indexPath)
@@ -155,6 +159,14 @@ extension SettingsViewController: UITableViewDataSource {
         return cell
     }
 
+    private func makeBoostDisplayCell(_ tableView: UITableView, indexPath: IndexPath) -> UITableViewCell {
+        let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
+        cell.textLabel?.text = String(localized: "settings.boost_display")
+        cell.detailTextLabel?.text = settings.boostDisplayMode.title
+        cell.accessoryType = .disclosureIndicator
+        return cell
+    }
+
     private func makeDohToggleCell(_ tableView: UITableView, indexPath: IndexPath) -> UITableViewCell {
         let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
         cell.textLabel?.text = "DNS over HTTPS"
@@ -201,7 +213,9 @@ extension SettingsViewController: UITableViewDelegate {
 
         switch visibleSections[indexPath.section] {
         case .general:
-            break
+            if indexPath.row == 1 {
+                showBoostDisplayPicker()
+            }
         case .appearance:
             if indexPath.row == 0 {
                 showAppearancePicker()
@@ -259,6 +273,24 @@ extension SettingsViewController {
                 self?.tableView.reloadSections(IndexSet(integer: Section.appearance.rawValue), with: .none)
             }
             if mode == settings.appearanceMode {
+                action.setValue(true, forKey: "checked")
+            }
+            alert.addAction(action)
+        }
+        alert.addAction(UIAlertAction(title: String(localized: "action.cancel"), style: .cancel))
+        present(alert, animated: true)
+    }
+
+    private func showBoostDisplayPicker() {
+        let alert = UIAlertController(title: String(localized: "settings.boost_display"), message: nil, preferredStyle: .actionSheet)
+        for mode in AppSettings.BoostDisplayMode.allCases {
+            let action = UIAlertAction(title: mode.title, style: .default) { [weak self] _ in
+                self?.settings.boostDisplayMode = mode
+                if let idx = self?.visibleSections.firstIndex(of: .general) {
+                    self?.tableView.reloadSections(IndexSet(integer: idx), with: .none)
+                }
+            }
+            if mode == settings.boostDisplayMode {
                 action.setValue(true, forKey: "checked")
             }
             alert.addAction(action)

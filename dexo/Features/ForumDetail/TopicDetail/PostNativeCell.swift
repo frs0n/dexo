@@ -300,6 +300,8 @@ final class PostNativeCell: UITableViewCell {
         copyLinkButton.addTarget(self, action: #selector(copyLinkTapped), for: .touchUpInside)
         replyButton.addTarget(self, action: #selector(replyButtonTapped), for: .touchUpInside)
         boostButton.addTarget(self, action: #selector(boostButtonTapped), for: .touchUpInside)
+        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(boostButtonLongPressed(_:)))
+        boostButton.addGestureRecognizer(longPress)
         bookmarkButton.addTarget(self, action: #selector(bookmarkButtonTapped), for: .touchUpInside)
 
         avatarImageView.isUserInteractionEnabled = true
@@ -377,8 +379,7 @@ final class PostNativeCell: UITableViewCell {
         let boostCount = post.boosts.count
         let hasMine = post.boosts.contains { $0.canDelete == true }
         let boostConfig = Self.symbolConfig
-        let boostIcon = (isBoostsExpanded || hasMine) ? "bolt.fill" : "bolt"
-        boostButton.setImage(UIImage(systemName: boostIcon, withConfiguration: boostConfig), for: .normal)
+        boostButton.setImage(UIImage(named: "roket.symbols", in: nil, with: boostConfig), for: .normal)
         boostButton.setTitle(boostCount > 0 ? " \(boostCount)" : nil, for: .normal)
         boostButton.tintColor = hasMine ? .systemYellow : .tertiaryLabel
         // Keep the button tappable when existing boosts are present (e.g. the user has
@@ -622,8 +623,13 @@ final class PostNativeCell: UITableViewCell {
         if post.boosts.isEmpty {
             delegate?.postCell(didTapBoostForPost: post)
         } else {
-            delegate?.postCell(didTapToggleBoostsForPost: post)
+            delegate?.postCell(didTapToggleBoostsForPost: post, sourceView: boostButton)
         }
+    }
+
+    @objc private func boostButtonLongPressed(_ gesture: UILongPressGestureRecognizer) {
+        guard gesture.state == .began, let post = currentPost else { return }
+        delegate?.postCell(didTapBoostForPost: post)
     }
 
     @objc private func bookmarkButtonTapped() {
@@ -681,7 +687,7 @@ final class PostNativeCell: UITableViewCell {
         reactionCountLabel.isHidden = true
         validReactions = []
         let config = Self.symbolConfig
-        boostButton.setImage(UIImage(systemName: "bolt", withConfiguration: config), for: .normal)
+        boostButton.setImage(UIImage(named: "roket.symbols", in: nil, with: config), for: .normal)
         boostButton.setTitle(nil, for: .normal)
         boostButton.tintColor = .tertiaryLabel
         boostButton.isHidden = false

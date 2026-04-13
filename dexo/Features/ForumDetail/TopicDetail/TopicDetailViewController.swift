@@ -24,6 +24,7 @@ final class TopicDetailViewController: ObservableViewController {
     private var earlierLoadAnchor: (postId: Int, cellTopOffset: CGFloat)?
     /// Cache actual cell heights to avoid jumps from inaccurate estimates
     private var cellHeightCache: [TopicDetailItem: CGFloat] = [:]
+    private lazy var boostDanmaku = BoostDanmakuOverlay(hostView: view)
 
     private lazy var tableView: UITableView = {
         let tv = ThemedTableView(frame: .zero, style: .plain)
@@ -876,9 +877,28 @@ extension TopicDetailViewController: PostCellDelegate {
         }
     }
 
-    func postCell(didTapToggleBoostsForPost post: DiscourseTopicDetail.Post) {
-        viewModel.toggleBoosts(forPostId: post.id)
-        refreshBoostUI()
+    func postCell(didTapToggleBoostsForPost post: DiscourseTopicDetail.Post, sourceView: UIView) {
+        switch AppSettings.shared.boostDisplayMode {
+        case .expand:
+            viewModel.toggleBoosts(forPostId: post.id)
+            refreshBoostUI()
+        case .danmaku:
+            // Button bottom edge in view coordinates
+            let buttonBottom = sourceView.convert(CGPoint(x: 0, y: sourceView.bounds.maxY), to: view).y
+            // Cell top edge: walk up to find the PostNativeCell
+            var cellTop = view.safeAreaInsets.top
+            var current: UIView? = sourceView
+            while let v = current {
+                if let cell = v as? PostNativeCell, let indexPath = tableView.indexPath(for: cell) {
+                    let rectInView = tableView.convert(tableView.rectForRow(at: indexPath), to: view)
+                    cellTop = max(view.safeAreaInsets.top, rectInView.origin.y) + 8
+                    break
+                }
+                current = v.superview
+            }
+            boostDanmaku.shoot(boosts: post.boosts, assetBaseURL: assetBaseURL,
+                               top: cellTop, bottom: buttonBottom)
+        }
     }
 
     func postCell(didTapDeleteBoost boost: DiscourseTopicDetail.Boost) {

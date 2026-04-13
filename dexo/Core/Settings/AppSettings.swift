@@ -115,6 +115,25 @@ final class AppSettings {
         customThemeSchemes = schemes
     }
 
+    // MARK: - Boost Display
+
+    enum BoostDisplayMode: Int, CaseIterable {
+        case danmaku = 0
+        case expand = 1
+
+        var title: String {
+            switch self {
+            case .expand: return String(localized: "settings.boost_display.expand")
+            case .danmaku: return String(localized: "settings.boost_display.danmaku")
+            }
+        }
+    }
+
+    var boostDisplayMode: BoostDisplayMode {
+        get { BoostDisplayMode(rawValue: defaults.integer(forKey: "boostDisplayMode")) ?? .danmaku }
+        set { defaults.set(newValue.rawValue, forKey: "boostDisplayMode") }
+    }
+
     // MARK: - DNS over HTTPS
 
     enum DoHProvider: Int, CaseIterable {

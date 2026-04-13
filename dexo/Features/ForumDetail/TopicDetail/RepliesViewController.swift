@@ -243,7 +243,7 @@ extension RepliesViewController: PostCellDelegate {
         }
     }
 
-    func postCell(didTapToggleBoostsForPost post: DiscourseTopicDetail.Post) {
+    func postCell(didTapToggleBoostsForPost post: DiscourseTopicDetail.Post, sourceView: UIView) {
         if expandedBoostPostIds.contains(post.id) {
             expandedBoostPostIds.remove(post.id)
         } else {

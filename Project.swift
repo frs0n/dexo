@@ -48,6 +48,7 @@ let project = Project(
                 .external(name: "SDWebImageSVGCoder"),
                 .external(name: "Lightbox"),
                 .package(product: "CookedHTML"),
+                .external(name: "DanmakuKit"),
             ],
             settings: .settings(
                 base: [

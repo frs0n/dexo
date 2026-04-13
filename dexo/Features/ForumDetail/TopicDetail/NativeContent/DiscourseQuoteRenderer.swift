@@ -51,6 +51,7 @@ enum DiscourseQuoteRenderer: BlockRenderer {
             titleButton.titleLabel?.lineBreakMode = .byTruncatingTail
             titleButton.setTitleColor(.link, for: .normal)
             titleButton.contentHorizontalAlignment = .leading
+            titleButton.setContentHuggingPriority(.defaultLow, for: .horizontal)
             titleButton.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             if let topicURL, let url = URL(string: topicURL) {
                 titleButton.addAction(UIAction { _ in

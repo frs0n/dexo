@@ -38,6 +38,9 @@ final class ForumTabBarController: UITabBarController {
             let meTab = UITab(title: String(localized: "tab.me"), image: UIImage(systemName: "person"), identifier: "me") { _ in meNav }
             let searchTab = UISearchTab { _ in searchNav }
             self.tabs = [homeTab, meTab, searchTab]
+            if traitCollection.userInterfaceIdiom == .pad {
+                self.mode = .tabSidebar
+            }
         } else {
             viewControllers = [homeNav, meNav, searchNav]
         }

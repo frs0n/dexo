@@ -28,6 +28,15 @@ final class ReplyComposerViewController: BaseViewController {
         return label
     }()
 
+    private let charCountLabel: UILabel = {
+        let label = UILabel()
+        label.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        label.textColor = .secondaryLabel
+        label.text = "0"
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
     private let emojiToggleButton: UIButton = {
         let button = UIButton(type: .system)
         let config = UIImage.SymbolConfiguration(pointSize: 20, weight: .regular)
@@ -47,6 +56,7 @@ final class ReplyComposerViewController: BaseViewController {
 
         emojiToggleButton.translatesAutoresizingMaskIntoConstraints = false
         bar.addSubview(emojiToggleButton)
+        bar.addSubview(charCountLabel)
 
         NSLayoutConstraint.activate([
             separator.topAnchor.constraint(equalTo: bar.topAnchor),
@@ -58,6 +68,9 @@ final class ReplyComposerViewController: BaseViewController {
             emojiToggleButton.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
             emojiToggleButton.widthAnchor.constraint(equalToConstant: 36),
             emojiToggleButton.heightAnchor.constraint(equalToConstant: 36),
+
+            charCountLabel.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -16),
+            charCountLabel.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
         ])
 
         return bar
@@ -181,6 +194,7 @@ final class ReplyComposerViewController: BaseViewController {
         }
         updatePlaceholder()
         updateSendButton()
+        updateCharCount()
     }
 
     private func updatePlaceholder() {
@@ -189,6 +203,10 @@ final class ReplyComposerViewController: BaseViewController {
 
     private func updateSendButton() {
         sendButton.isEnabled = !(textView.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    private func updateCharCount() {
+        charCountLabel.text = "\(textView.text.count)"
     }
 
     // MARK: - Actions
@@ -236,5 +254,6 @@ extension ReplyComposerViewController: UITextViewDelegate {
     func textViewDidChange(_ textView: UITextView) {
         updatePlaceholder()
         updateSendButton()
+        updateCharCount()
     }
 }

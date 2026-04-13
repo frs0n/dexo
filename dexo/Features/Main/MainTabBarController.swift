@@ -12,7 +12,16 @@ final class MainTabBarController: UITabBarController {
         let settingsNav = UINavigationController(rootViewController: settingsVC)
         settingsNav.tabBarItem = UITabBarItem(title: String(localized: "tab.settings"), image: UIImage(systemName: "gearshape"), tag: 1)
 
-        viewControllers = [forumListNav, settingsNav]
+        if #available(iOS 18.0, *) {
+            let forumsTab = UITab(title: String(localized: "tab.forums"), image: UIImage(systemName: "list.bullet"), identifier: "forums") { _ in forumListNav }
+            let settingsTab = UITab(title: String(localized: "tab.settings"), image: UIImage(systemName: "gearshape"), identifier: "settings") { _ in settingsNav }
+            tabs = [forumsTab, settingsTab]
+            if traitCollection.userInterfaceIdiom == .pad {
+                mode = .tabSidebar
+            }
+        } else {
+            viewControllers = [forumListNav, settingsNav]
+        }
 
         tabBar.tintColor = ThemeManager.shared.accentColor
 

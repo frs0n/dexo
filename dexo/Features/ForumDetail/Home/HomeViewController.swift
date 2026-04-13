@@ -178,8 +178,8 @@ final class HomeViewController: ObservableViewController {
 
         NSLayoutConstraint.activate([
             segmentedControl.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
-            segmentedControl.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            segmentedControl.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            segmentedControl.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
+            segmentedControl.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
 
             tableView.topAnchor.constraint(equalTo: view.topAnchor),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),

@@ -231,7 +231,7 @@ final class TopicDetailViewController: ObservableViewController {
             errorLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
             errorLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -32),
 
-            bottomBar.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            bottomBar.centerXAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerXAnchor),
             bottomBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12),
 
             topLoadingBar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
@@ -402,11 +402,11 @@ final class TopicDetailViewController: ObservableViewController {
 
         NSLayoutConstraint.activate([
             titleLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
-            titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-            titleLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
+            titleLabel.leadingAnchor.constraint(equalTo: container.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            titleLabel.trailingAnchor.constraint(equalTo: container.safeAreaLayoutGuide.trailingAnchor, constant: -16),
             tagsContainer.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: hasVisibleTags ? 8 : 0),
-            tagsContainer.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-            tagsContainer.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -16),
+            tagsContainer.leadingAnchor.constraint(equalTo: container.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            tagsContainer.trailingAnchor.constraint(lessThanOrEqualTo: container.safeAreaLayoutGuide.trailingAnchor, constant: -16),
             tagsContainer.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8),
         ])
         let targetSize = CGSize(width: tableView.bounds.width, height: UIView.layoutFittingCompressedSize.height)

@@ -139,8 +139,8 @@ final class SearchViewController: ObservableViewController, UISearchBarDelegate 
 
             emptyLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             emptyLabel.centerYAnchor.constraint(equalTo: tableView.centerYAnchor),
-            emptyLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
-            emptyLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -32),
+            emptyLabel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 32),
+            emptyLabel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -32),
         ])
 
         Task {
@@ -159,8 +159,8 @@ final class SearchViewController: ObservableViewController, UISearchBarDelegate 
 
         NSLayoutConstraint.activate([
             filterBar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            filterBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            filterBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            filterBar.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+            filterBar.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
             filterBar.heightAnchor.constraint(equalToConstant: 44),
 
             categoryButton.leadingAnchor.constraint(equalTo: filterBar.leadingAnchor, constant: 16),

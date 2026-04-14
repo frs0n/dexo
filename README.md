@@ -23,11 +23,11 @@
 - [x] **Topic Browsing** — Latest / Top topic lists with infinite scrolling
 - [x] **Categories & Tags** — Browse topics by category or tag
 - [x] **Topic Detail** — HTML content rendering, image viewer, code blocks, collapsible sections
-- [x] **Reply** — Reply to topics or to specific posts
+- [x] **Reply & Create Topic** — Reply to topics or specific posts, publish new topics
+- [x] **Notifications** — Real-time notification updates via MessageBus long-polling
+- [x] **Private Messages** — View messages with unread indicators, mark as read on tap
 - [x] **Secure Auth** — RSA-based Discourse User API Key authentication with Keychain storage
-- [x] **Appearance** — System / Light / Dark mode
-- [ ] **Notifications & Messages** — View forum notifications and private messages
-- [ ] **Create Topic** — Publish new forum topics
+- [x] **Appearance** — System / Light / Dark mode with custom theme color support
 
 ## Tech Stack
 

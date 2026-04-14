@@ -70,7 +70,10 @@ final class UserProfileViewController: ObservableViewController {
                 id: profile.id,
                 username: profile.username,
                 name: profile.name,
-                avatarTemplate: profile.avatarTemplate
+                avatarTemplate: profile.avatarTemplate,
+                unreadNotifications: nil,
+                unreadPrivateMessages: nil,
+                unreadHighPriorityNotifications: nil
             )
             profileHeader.configure(
                 user: user,

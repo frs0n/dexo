@@ -4,6 +4,7 @@ final class ForumTabBarController: UITabBarController {
     private let api: DiscourseAPI
     private weak var authGate: AuthGating?
     private(set) var navigationControllers: [UINavigationController] = []
+    var notificationPoller: NotificationPoller?
 
     init(api: DiscourseAPI, authGate: AuthGating? = nil) {
         self.api = api

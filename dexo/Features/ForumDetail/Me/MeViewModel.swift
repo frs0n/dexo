@@ -21,7 +21,7 @@ final class MeViewModel {
         do {
             let username = AuthManager.shared.username(for: api.baseURL) ?? ""
             async let profileTask = api.fetchUserProfile(username: username)
-            currentUser = await DiscourseCurrentUser(id: profileTask.id, username: profileTask.username, name: profileTask.name, avatarTemplate: profileTask.avatarTemplate)
+            currentUser = await DiscourseCurrentUser(id: profileTask.id, username: profileTask.username, name: profileTask.name, avatarTemplate: profileTask.avatarTemplate, unreadNotifications: nil, unreadPrivateMessages: nil, unreadHighPriorityNotifications: nil)
             async let summaryTask = api.fetchUserSummary(username: username)
             let (profile, userSummary) = try await (profileTask, summaryTask)
             userProfile = profile

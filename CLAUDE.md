@@ -44,6 +44,12 @@ Dexo is a native iOS Discourse forum client (UIKit, iOS 17+). No SwiftUI.
 - Use `String(localized: "key")` for all user-facing strings — never hardcode string literals
 - Xcode automatically extracts keys into `dexo/Localizable.xcstrings` at build time (`SWIFT_EMIT_LOC_STRINGS = YES`)
 - Add Chinese translations directly in `Localizable.xcstrings`
+- When adding or modifying user-facing strings, always provide both English and Chinese translations
+
+## Theming
+
+- Use `ThemeManager.shared` for colors (e.g. `codeBackgroundColor`) — never hardcode colors like `.systemBackground`
+- Set theme-dependent colors in display-time methods (`willDisplay()`, `configure()`, `updateUI()`) rather than `init`, so they respond to runtime theme/color changes
 
 ## Project Configuration
 

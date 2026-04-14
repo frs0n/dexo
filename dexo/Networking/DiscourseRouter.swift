@@ -32,12 +32,15 @@ enum DiscourseRouter {
     case toggleReaction(postId: Int, reactionId: String)
     case votePoll
     case removePollVote
+    case markNotificationRead
+    case topicTimings
+    case messageBusPoll(clientId: String)
 
     var method: HTTPMethod {
         switch self {
-        case .createTopic, .createBookmark, .createBoost, .uploadImage:
+        case .createTopic, .createBookmark, .createBoost, .uploadImage, .topicTimings, .messageBusPoll:
             return .post
-        case .toggleReaction, .votePoll:
+        case .toggleReaction, .votePoll, .markNotificationRead:
             return .put
         case .deleteBookmark, .deleteBoost, .removePollVote:
             return .delete
@@ -116,6 +119,12 @@ enum DiscourseRouter {
             return "/polls/vote"
         case .removePollVote:
             return "/polls/vote"
+        case .markNotificationRead:
+            return "/notifications/mark-read"
+        case .topicTimings:
+            return "/topics/timings"
+        case .messageBusPoll(let clientId):
+            return "/message-bus/\(clientId)/poll"
         }
     }
 }

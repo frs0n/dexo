@@ -346,7 +346,7 @@ final class TopicDetailViewController: ObservableViewController {
                 guard viewModel.parsedBlocks[post.id] != nil,
                       seen.insert(post.id).inserted else { continue }
                 items.append(.post(post.id))
-                if self.viewModel.expandedBoostPostIds.contains(post.id) {
+                if viewModel.expandedBoostPostIds.contains(post.id) {
                     items.append(.boosts(post.id))
                 }
             }
@@ -443,10 +443,9 @@ final class TopicDetailViewController: ObservableViewController {
             config.imagePadding = 4
             config.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 10, weight: .medium)
             button.configuration = config
-            let tagSlug = tag.slug
             button.addAction(UIAction { [weak self] _ in
                 guard let self else { return }
-                let vc = TagTopicsViewController(api: self.api, tagName: tagSlug)
+                let vc = TagTopicsViewController(api: self.api, tag: tag)
                 self.navigationController?.pushViewController(vc, animated: true)
             }, for: .touchUpInside)
             buttons.append(button)
@@ -592,8 +591,11 @@ final class TopicDetailViewController: ObservableViewController {
                 let category = DiscourseCategory(id: categoryId, name: slug, slug: slug)
                 let vc = CategoryTopicsViewController(api: api, category: category)
                 navigationController?.pushViewController(vc, animated: true)
-            } else if let tagName = parseTagName(from: url) {
-                let vc = TagTopicsViewController(api: api, tagName: tagName)
+            } else if let tag = parseTagInfo(from: url) {
+                let vc = TagTopicsViewController(api: api, tag: tag)
+                navigationController?.pushViewController(vc, animated: true)
+            } else if let username = parseUsername(from: url) {
+                let vc = UserProfileViewController(api: api, username: username)
                 navigationController?.pushViewController(vc, animated: true)
             } else {
                 let safari = SFSafariViewController(url: url)
@@ -631,6 +633,32 @@ final class TopicDetailViewController: ObservableViewController {
             }
         }
         return nil
+    }
+
+    private func parseTagInfo(from url: URL) -> DiscourseTopicDetail.Tag? {
+        let components = url.pathComponents
+
+        if let tagIndex = components.firstIndex(where: { $0 == "tag" || $0 == "tags" }),
+           tagIndex + 2 < components.count
+        {
+            let tagName = components[tagIndex + 1]
+            let tagIdString = components[tagIndex + 2]
+
+            // 转 Int，失败就返回 nil
+            if let tagId = Int(tagIdString) {
+                return DiscourseTopicDetail.Tag(id: tagId, name: tagName, slug: tagName)
+            }
+        }
+
+        return nil
+    }
+
+    private func parseUsername(from url: URL) -> String? {
+        let components = url.pathComponents
+        // Format: /u/{username}
+        guard let uIndex = components.firstIndex(of: "u"),
+              uIndex + 1 < components.count else { return nil }
+        return components[uIndex + 1]
     }
 
     private func parseTagName(from url: URL) -> String? {
@@ -741,7 +769,8 @@ extension TopicDetailViewController: UITableViewDelegate {
 
     func tableView(_ tableView: UITableView, estimatedHeightForRowAt indexPath: IndexPath) -> CGFloat {
         if let item = dataSource.itemIdentifier(for: indexPath),
-           let cached = cellHeightCache[item] {
+           let cached = cellHeightCache[item]
+        {
             return cached
         }
         return 200
@@ -1037,5 +1066,4 @@ extension TopicDetailViewController: PostCellDelegate {
             dataSource.apply(snapshot, animatingDifferences: false)
         }
     }
-
 }

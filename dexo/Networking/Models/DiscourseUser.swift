@@ -13,10 +13,16 @@ struct DiscourseCurrentUser: Decodable {
     let username: String
     let name: String?
     let avatarTemplate: String?
+    let unreadNotifications: Int?
+    let unreadPrivateMessages: Int?
+    let unreadHighPriorityNotifications: Int?
 
     enum CodingKeys: String, CodingKey {
         case id, username, name
         case avatarTemplate = "avatar_template"
+        case unreadNotifications = "unread_notifications"
+        case unreadPrivateMessages = "unread_private_messages"
+        case unreadHighPriorityNotifications = "unread_high_priority_notifications"
     }
 }
 

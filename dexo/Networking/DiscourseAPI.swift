@@ -110,11 +110,9 @@ final class DiscourseAPI {
             method: .post
         ).serializingDecodable(DiscourseUploadResponse.self).response
 
-        #if DEBUG
         if let data = response.data, let body = String(data: data, encoding: .utf8) {
-            print("[DiscourseAPI] POST \(url)\n\(body)")
+            debugLog("[DiscourseAPI] POST \(url)\n\(body)")
         }
-        #endif
 
         if let newToken = response.response?.value(forHTTPHeaderField: "X-CSRF-Token") {
             interceptor.updateCSRFToken(newToken)
@@ -244,6 +242,69 @@ final class DiscourseAPI {
         )
     }
 
+    /// Mark a single notification as read, or all if `id` is nil.
+    func markNotificationRead(id: Int? = nil) async throws {
+        let route = DiscourseRouter.markNotificationRead
+        let url = baseURL + route.path
+        var parameters: Parameters? = nil
+        if let id { parameters = ["id": id] }
+        let response = await session.request(url, method: route.method, parameters: parameters, encoding: JSONEncoding.default)
+            .serializingData().response
+        if let statusCode = response.response?.statusCode, !(200 ..< 300).contains(statusCode) {
+            throw DiscourseAPIError(messages: ["Failed to mark notification read"], errorType: nil)
+        }
+    }
+
+    /// Record topic timings so Discourse marks posts as read.
+    func postTopicTimings(topicId: Int, highestPostNumber: Int) async throws {
+        let route = DiscourseRouter.topicTimings
+        let url = baseURL + route.path
+        // timings dict: key = post number (string), value = milliseconds spent
+        var timings: [String: Int] = [:]
+        for i in 1 ... highestPostNumber {
+            timings[String(i)] = 1000
+        }
+        let parameters: Parameters = [
+            "topic_id": topicId,
+            "topic_time": 1000,
+            "timings": timings,
+        ]
+        let response = await session.request(url, method: route.method, parameters: parameters, encoding: JSONEncoding.default)
+            .serializingData().response
+        if let statusCode = response.response?.statusCode, !(200 ..< 300).contains(statusCode) {
+            throw DiscourseAPIError(messages: ["Failed to post topic timings"], errorType: nil)
+        }
+    }
+
+    func pollMessageBus(clientId: String, channels: [String: Int]) async throws -> [MessageBusMessage] {
+        let route = DiscourseRouter.messageBusPoll(clientId: clientId)
+        let url = baseURL + route.path
+        debugLog("[MessageBus] POST \(url) channels=\(channels)")
+        let response = await session.request(url, method: route.method, parameters: channels, encoding: URLEncoding.default)
+            .serializingData().response
+        if let statusCode = response.response?.statusCode, !(200 ..< 300).contains(statusCode) {
+            throw DiscourseAPIError(messages: ["MessageBus poll failed"], errorType: nil)
+        }
+        guard let data = response.data else { return [] }
+        debugLog("[MessageBus] \(response.response?.statusCode ?? 0) \(String(data: data, encoding: .utf8) ?? "")")
+
+        // MessageBus returns chunked responses: multiple JSON arrays separated by "|"
+        let body = String(decoding: data, as: UTF8.self)
+        let decoder = JSONDecoder()
+        var result: [MessageBusMessage] = []
+        for chunk in body.split(separator: "|") {
+            let trimmed = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, let chunkData = trimmed.data(using: .utf8) else { continue }
+            do {
+                let messages = try decoder.decode([MessageBusMessage].self, from: chunkData)
+                result.append(contentsOf: messages)
+            } catch {
+                debugLog("[MessageBus] chunk decode error: \(error)")
+            }
+        }
+        return result
+    }
+
     func fetchBookmarks(username: String) async throws -> DiscourseBookmarkList {
         try await request(route: .bookmarks(username: username))
     }
@@ -293,11 +354,9 @@ final class DiscourseAPI {
             .serializingDecodable(T.self)
             .response
 
-        #if DEBUG
         if let data = response.data, let body = String(data: data, encoding: .utf8) {
-            print("[DiscourseAPI] \(route.method.rawValue) \(url)\n\(body)")
+            debugLog("[DiscourseAPI] \(route.method.rawValue) \(url)\n\(body)")
         }
-        #endif
 
         if let newToken = response.response?.value(forHTTPHeaderField: "X-CSRF-Token") {
             interceptor.updateCSRFToken(newToken)

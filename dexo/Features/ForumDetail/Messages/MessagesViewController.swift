@@ -2,31 +2,48 @@ import UIKit
 
 final class MessagesViewController: ObservableViewController {
     private let viewModel: MessagesViewModel
+    private let api: DiscourseAPI
     private weak var authGate: AuthGating?
 
-    private let placeholderLabel: UILabel = {
+    private lazy var tableView: UITableView = {
+        let tv = ThemedTableView(frame: .zero, style: .plain)
+        tv.translatesAutoresizingMaskIntoConstraints = false
+        tv.register(MessageCell.self, forCellReuseIdentifier: MessageCell.reuseIdentifier)
+        tv.delegate = self
+        tv.dataSource = self
+        return tv
+    }()
+
+    private let activityIndicator: UIActivityIndicatorView = {
+        let ai = UIActivityIndicatorView(style: .medium)
+        ai.hidesWhenStopped = true
+        ai.translatesAutoresizingMaskIntoConstraints = false
+        return ai
+    }()
+
+    private let emptyLabel: UILabel = {
         let label = UILabel()
-        label.text = String(localized: "messages.title")
+        label.text = String(localized: "messages.empty")
         label.textColor = .secondaryLabel
         label.textAlignment = .center
+        label.numberOfLines = 0
         label.translatesAutoresizingMaskIntoConstraints = false
+        label.isHidden = true
         return label
     }()
 
-    private let loginButton: UIButton = {
-        var config = UIButton.Configuration.filled()
-        config.title = String(localized: "messages.login_prompt")
-        config.cornerStyle = .medium
-        let button = UIButton(configuration: config)
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.isHidden = true
-        return button
+    private lazy var refreshControl: UIRefreshControl = {
+        let rc = UIRefreshControl()
+        rc.addTarget(self, action: #selector(pullToRefresh), for: .valueChanged)
+        return rc
     }()
 
     init(api: DiscourseAPI, authGate: AuthGating? = nil) {
+        self.api = api
         self.viewModel = MessagesViewModel(api: api)
         self.authGate = authGate
         super.init(nibName: nil, bundle: nil)
+        hidesBottomBarWhenPushed = true
     }
 
     required init?(coder: NSCoder) {
@@ -35,17 +52,28 @@ final class MessagesViewController: ObservableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.addSubview(placeholderLabel)
-        view.addSubview(loginButton)
+        title = String(localized: "messages.title")
+        tableView.refreshControl = refreshControl
+        tableView.tableHeaderView = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: CGFloat.leastNormalMagnitude))
+
+        view.addSubview(tableView)
+        view.addSubview(activityIndicator)
+        view.addSubview(emptyLabel)
+
         NSLayoutConstraint.activate([
-            placeholderLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            placeholderLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            tableView.topAnchor.constraint(equalTo: view.topAnchor),
+            tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            loginButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            loginButton.topAnchor.constraint(equalTo: placeholderLabel.bottomAnchor, constant: 16),
+            activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            activityIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+
+            emptyLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            emptyLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            emptyLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
+            emptyLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -32),
         ])
-
-        loginButton.addTarget(self, action: #selector(loginTapped), for: .touchUpInside)
 
         Task {
             await viewModel.loadMessages(username: authGate?.currentUsername() ?? "")
@@ -53,26 +81,55 @@ final class MessagesViewController: ObservableViewController {
     }
 
     override func updateUI() {
-        if viewModel.requiresLogin {
-            placeholderLabel.text = viewModel.errorMessage
-            loginButton.isHidden = false
-            return
+        if viewModel.isLoading {
+            activityIndicator.startAnimating()
+        } else {
+            activityIndicator.stopAnimating()
         }
 
-        loginButton.isHidden = true
-        if viewModel.messages.isEmpty {
-            placeholderLabel.text = viewModel.isLoading ? String(localized: "messages.loading") : String(localized: "messages.empty")
+        if !viewModel.isLoading, viewModel.messages.isEmpty {
+            emptyLabel.isHidden = false
         } else {
-            placeholderLabel.text = String(localized: "messages.count \(viewModel.messages.count)")
+            emptyLabel.isHidden = true
         }
+
+        tableView.reloadData()
     }
 
-    @objc private func loginTapped() {
-        authGate?.requireAuth { [weak self] in
-            guard let self else { return }
-            Task {
-                await self.viewModel.loadMessages(username: self.authGate?.currentUsername() ?? "")
-            }
+    @objc private func pullToRefresh() {
+        Task {
+            await viewModel.loadMessages(username: authGate?.currentUsername() ?? "")
+            refreshControl.endRefreshing()
         }
+    }
+}
+
+// MARK: - UITableViewDataSource
+
+extension MessagesViewController: UITableViewDataSource {
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        viewModel.messages.count
+    }
+
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        guard let cell = tableView.dequeueReusableCell(withIdentifier: MessageCell.reuseIdentifier, for: indexPath) as? MessageCell else {
+            return UITableViewCell()
+        }
+        let topic = viewModel.messages[indexPath.row]
+        cell.configure(with: topic, users: viewModel.users, assetBaseURL: api.assetBaseURL, hasUnread: viewModel.hasUnread(topicId: topic.id))
+        cell.accessoryType = .disclosureIndicator
+        return cell
+    }
+}
+
+// MARK: - UITableViewDelegate
+
+extension MessagesViewController: UITableViewDelegate {
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        let topic = viewModel.messages[indexPath.row]
+        Task { await viewModel.markMessageRead(topicId: topic.id) }
+        let detailVC = TopicDetailViewController(api: api, topicId: topic.id)
+        navigationController?.pushViewController(detailVC, animated: true)
     }
 }

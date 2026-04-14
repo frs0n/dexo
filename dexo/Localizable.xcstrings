@@ -785,6 +785,38 @@
         }
       }
     },
+    "me.messages" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Messages"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "私信"
+          }
+        }
+      }
+    },
+    "me.notifications" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notifications"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提醒"
+          }
+        }
+      }
+    },
     "me.stats.days" : {
       "localizations" : {
         "en" : {
@@ -850,6 +882,7 @@
       }
     },
     "messages.count %lld" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -882,6 +915,7 @@
       }
     },
     "messages.loading" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -898,6 +932,7 @@
       }
     },
     "messages.login_prompt" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -909,6 +944,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "登录后查看私信"
+          }
+        }
+      }
+    },
+    "messages.posts_count %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld posts"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 条回复"
           }
         }
       }
@@ -930,6 +981,7 @@
       }
     },
     "notifications.count %lld" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -941,6 +993,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 条通知"
+          }
+        }
+      }
+    },
+    "notifications.mark_all_read" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mark All Read"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部已读"
           }
         }
       }
@@ -962,6 +1030,7 @@
       }
     },
     "notifications.loading" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -978,6 +1047,7 @@
       }
     },
     "notifications.login_prompt" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -999,6 +1069,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Notifications"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知"
+          }
+        }
+      }
+    },
+    "notifications.unknown" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notification"
           }
         },
         "zh-Hans" : {

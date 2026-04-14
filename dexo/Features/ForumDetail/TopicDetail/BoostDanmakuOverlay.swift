@@ -62,7 +62,6 @@ final class BoostDanmakuCell: DanmakuCell {
     required init(frame: CGRect) {
         super.init(frame: frame)
         displayAsync = false
-        backgroundColor = ThemeManager.shared.codeBackgroundColor
         addSubview(avatarImageView)
         addSubview(textView)
     }
@@ -74,6 +73,8 @@ final class BoostDanmakuCell: DanmakuCell {
     override func willDisplay() {
         guard let model = model as? BoostDanmakuCellModel,
               let boost = model.boost else { return }
+
+        backgroundColor = ThemeManager.shared.codeBackgroundColor
 
         let baseURL = model.assetBaseURL
 

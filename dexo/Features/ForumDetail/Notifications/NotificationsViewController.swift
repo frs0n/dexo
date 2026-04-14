@@ -2,31 +2,48 @@ import UIKit
 
 final class NotificationsViewController: ObservableViewController {
     private let viewModel: NotificationsViewModel
+    private let api: DiscourseAPI
     private weak var authGate: AuthGating?
 
-    private let placeholderLabel: UILabel = {
+    private lazy var tableView: UITableView = {
+        let tv = ThemedTableView(frame: .zero, style: .plain)
+        tv.translatesAutoresizingMaskIntoConstraints = false
+        tv.register(NotificationCell.self, forCellReuseIdentifier: NotificationCell.reuseIdentifier)
+        tv.delegate = self
+        tv.dataSource = self
+        return tv
+    }()
+
+    private let activityIndicator: UIActivityIndicatorView = {
+        let ai = UIActivityIndicatorView(style: .medium)
+        ai.hidesWhenStopped = true
+        ai.translatesAutoresizingMaskIntoConstraints = false
+        return ai
+    }()
+
+    private let emptyLabel: UILabel = {
         let label = UILabel()
-        label.text = String(localized: "notifications.title")
+        label.text = String(localized: "notifications.empty")
         label.textColor = .secondaryLabel
         label.textAlignment = .center
+        label.numberOfLines = 0
         label.translatesAutoresizingMaskIntoConstraints = false
+        label.isHidden = true
         return label
     }()
 
-    private let loginButton: UIButton = {
-        var config = UIButton.Configuration.filled()
-        config.title = String(localized: "notifications.login_prompt")
-        config.cornerStyle = .medium
-        let button = UIButton(configuration: config)
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.isHidden = true
-        return button
+    private lazy var refreshControl: UIRefreshControl = {
+        let rc = UIRefreshControl()
+        rc.addTarget(self, action: #selector(pullToRefresh), for: .valueChanged)
+        return rc
     }()
 
     init(api: DiscourseAPI, authGate: AuthGating? = nil) {
+        self.api = api
         self.viewModel = NotificationsViewModel(api: api)
         self.authGate = authGate
         super.init(nibName: nil, bundle: nil)
+        hidesBottomBarWhenPushed = true
     }
 
     required init?(coder: NSCoder) {
@@ -35,17 +52,35 @@ final class NotificationsViewController: ObservableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.addSubview(placeholderLabel)
-        view.addSubview(loginButton)
+        title = String(localized: "notifications.title")
+        tableView.refreshControl = refreshControl
+        tableView.tableHeaderView = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: CGFloat.leastNormalMagnitude))
+
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: String(localized: "notifications.mark_all_read"),
+            style: .plain,
+            target: self,
+            action: #selector(markAllReadTapped)
+        )
+
+        view.addSubview(tableView)
+        view.addSubview(activityIndicator)
+        view.addSubview(emptyLabel)
+
         NSLayoutConstraint.activate([
-            placeholderLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            placeholderLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            tableView.topAnchor.constraint(equalTo: view.topAnchor),
+            tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            loginButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            loginButton.topAnchor.constraint(equalTo: placeholderLabel.bottomAnchor, constant: 16),
+            activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            activityIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+
+            emptyLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            emptyLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            emptyLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
+            emptyLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -32),
         ])
-
-        loginButton.addTarget(self, action: #selector(loginTapped), for: .touchUpInside)
 
         Task {
             await viewModel.loadNotifications()
@@ -53,26 +88,71 @@ final class NotificationsViewController: ObservableViewController {
     }
 
     override func updateUI() {
-        if viewModel.requiresLogin {
-            placeholderLabel.text = viewModel.errorMessage
-            loginButton.isHidden = false
-            return
+        if viewModel.isLoading {
+            activityIndicator.startAnimating()
+        } else {
+            activityIndicator.stopAnimating()
         }
 
-        loginButton.isHidden = true
-        if viewModel.notifications.isEmpty {
-            placeholderLabel.text = viewModel.isLoading ? String(localized: "notifications.loading") : String(localized: "notifications.empty")
+        let hasUnread = viewModel.notifications.contains { !$0.read }
+        navigationItem.rightBarButtonItem?.isEnabled = hasUnread
+
+        if !viewModel.isLoading, viewModel.notifications.isEmpty {
+            emptyLabel.isHidden = false
         } else {
-            placeholderLabel.text = String(localized: "notifications.count \(viewModel.notifications.count)")
+            emptyLabel.isHidden = true
+        }
+
+        tableView.reloadData()
+    }
+
+    @objc private func pullToRefresh() {
+        Task {
+            await viewModel.loadNotifications()
+            refreshControl.endRefreshing()
         }
     }
 
-    @objc private func loginTapped() {
-        authGate?.requireAuth { [weak self] in
-            guard let self else { return }
+    @objc private func markAllReadTapped() {
+        Task {
+            await viewModel.markAllRead()
+        }
+    }
+}
+
+// MARK: - UITableViewDataSource
+
+extension NotificationsViewController: UITableViewDataSource {
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        viewModel.notifications.count
+    }
+
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        guard let cell = tableView.dequeueReusableCell(withIdentifier: NotificationCell.reuseIdentifier, for: indexPath) as? NotificationCell else {
+            return UITableViewCell()
+        }
+        let notification = viewModel.notifications[indexPath.row]
+        cell.configure(with: notification)
+        return cell
+    }
+}
+
+// MARK: - UITableViewDelegate
+
+extension NotificationsViewController: UITableViewDelegate {
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        let notification = viewModel.notifications[indexPath.row]
+
+        if !notification.read {
             Task {
-                await self.viewModel.loadNotifications()
+                await viewModel.markRead(id: notification.id)
             }
+        }
+
+        if let topicId = notification.topicId {
+            let detailVC = TopicDetailViewController(api: api, topicId: topicId)
+            navigationController?.pushViewController(detailVC, animated: true)
         }
     }
 }

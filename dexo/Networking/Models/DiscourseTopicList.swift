@@ -51,11 +51,12 @@ struct DiscourseTopicList: Decodable {
         let createdAt: String
         let lastPostedAt: String?
         let pinned: Bool?
+        let unseen: Bool?
         let excerpt: String?
         let posters: [Poster]?
 
         enum CodingKeys: String, CodingKey {
-            case id, title, views, pinned, excerpt, posters
+            case id, title, views, pinned, unseen, excerpt, posters
             case fancyTitle = "fancy_title"
             case postsCount = "posts_count"
             case replyCount = "reply_count"

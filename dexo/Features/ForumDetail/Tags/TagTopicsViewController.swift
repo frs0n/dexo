@@ -75,29 +75,28 @@ final class TagTopicsViewController: ObservableViewController {
         return tv
     }()
 
-    private lazy var dataSource: UITableViewDiffableDataSource<Int, Int> = {
-        UITableViewDiffableDataSource<Int, Int>(tableView: tableView) { [weak self] tableView, indexPath, topicId in
-            guard let self,
-                  let cell = tableView.dequeueReusableCell(withIdentifier: TopicCell.reuseIdentifier, for: indexPath) as? TopicCell,
-                  let topic = self.viewModel.topics.first(where: { $0.id == topicId }) else {
-                return UITableViewCell()
-            }
-            let assetBaseURL = self.api.assetBaseURL
-            var avatarURL: URL?
-            if let template = self.viewModel.avatarTemplate(for: topic) {
-                let sized = template.replacingOccurrences(of: "{size}", with: "96")
-                let urlString = sized.hasPrefix("http") ? sized : assetBaseURL + sized
-                avatarURL = URL(string: urlString)
-            }
-            cell.configure(
-                with: topic,
-                avatarURL: avatarURL,
-                categoryName: nil,
-                categoryColor: nil
-            )
-            return cell
+    private lazy var dataSource: UITableViewDiffableDataSource<Int, Int> = .init(tableView: tableView) { [weak self] tableView, indexPath, topicId in
+        guard let self,
+              let cell = tableView.dequeueReusableCell(withIdentifier: TopicCell.reuseIdentifier, for: indexPath) as? TopicCell,
+              let topic = self.viewModel.topics.first(where: { $0.id == topicId })
+        else {
+            return UITableViewCell()
         }
-    }()
+        let assetBaseURL = self.api.assetBaseURL
+        var avatarURL: URL?
+        if let template = self.viewModel.avatarTemplate(for: topic) {
+            let sized = template.replacingOccurrences(of: "{size}", with: "96")
+            let urlString = sized.hasPrefix("http") ? sized : assetBaseURL + sized
+            avatarURL = URL(string: urlString)
+        }
+        cell.configure(
+            with: topic,
+            avatarURL: avatarURL,
+            categoryName: nil,
+            categoryColor: nil
+        )
+        return cell
+    }
 
     private let activityIndicator: UIActivityIndicatorView = {
         let ai = UIActivityIndicatorView(style: .medium)
@@ -119,14 +118,15 @@ final class TagTopicsViewController: ObservableViewController {
         return rc
     }()
 
-    init(api: DiscourseAPI, tagName: String) {
+    init(api: DiscourseAPI, tag: DiscourseTopicDetail.Tag) {
         self.api = api
-        self.tagName = tagName
-        self.viewModel = TagTopicsViewModel(api: api, tagName: tagName)
+        self.tagName = tag.name
+        self.viewModel = TagTopicsViewModel(api: api, tagName: String(tag.id))
         super.init(nibName: nil, bundle: nil)
         title = tagName
     }
 
+    @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }

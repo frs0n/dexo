@@ -5,6 +5,7 @@ final class ForumContainerViewController: BaseViewController, AuthGating {
     private(set) var forum: ForumInstance
     private let api: DiscourseAPI
     private let authManager = AuthManager.shared
+    private var notificationPoller: NotificationPoller?
 
     init(forum: ForumInstance) {
         self.forum = forum
@@ -25,6 +26,7 @@ final class ForumContainerViewController: BaseViewController, AuthGating {
         setupTabBar()
         configureNavItems()
         startObservingAuth()
+        startNotificationPoller()
     }
 
     private func startObservingAuth() {
@@ -34,6 +36,42 @@ final class ForumContainerViewController: BaseViewController, AuthGating {
         } onChange: {
             Task { @MainActor [weak self] in
                 self?.startObservingAuth()
+            }
+        }
+    }
+
+    private func startNotificationPoller() {
+        let poller = NotificationPoller(api: api) { [weak self] in
+            self?.currentUsername()
+        }
+        poller.start()
+        notificationPoller = poller
+
+        // Pass poller to tab bar so MeViewController can read counts
+        if let tabBarVC = children.first as? ForumTabBarController {
+            tabBarVC.notificationPoller = poller
+        }
+
+        // Observe total unread count to update tab badge
+        observeUnreadBadge()
+    }
+
+    private func observeUnreadBadge() {
+        guard let poller = notificationPoller else { return }
+        withObservationTracking {
+            _ = poller.hasAnyUnread
+        } onChange: {
+            Task { @MainActor [weak self] in
+                guard let self, let tabBarVC = self.children.first as? ForumTabBarController else { return }
+                // Red dot: empty string shows dot without number
+                let badge: String? = poller.hasAnyUnread ? "" : nil
+                if #available(iOS 18.0, *) {
+                    guard tabBarVC.tabs.count > 1 else { return }
+                    tabBarVC.tabs[1].badgeValue = badge
+                } else {
+                    tabBarVC.viewControllers?[1].tabBarItem.badgeValue = badge
+                }
+                self.observeUnreadBadge()
             }
         }
     }

@@ -4,6 +4,9 @@ final class MeViewController: ObservableViewController {
     private let api: DiscourseAPI
     private let viewModel: MeViewModel
     private weak var authGate: AuthGating?
+    private var notificationPoller: NotificationPoller? {
+        (tabBarController as? ForumTabBarController)?.notificationPoller
+    }
 
     private let profileHeader = ProfileHeaderView()
 
@@ -38,6 +41,11 @@ final class MeViewController: ObservableViewController {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        notificationPoller?.pollNow()
     }
 
     override func viewDidLoad() {
@@ -189,7 +197,7 @@ extension MeViewController: UITableViewDataSource {
         switch section {
         case 0:
             let isLoggedIn = authGate?.isAuthenticated() ?? false
-            return isLoggedIn ? 1 : 0
+            return isLoggedIn ? 3 : 0
         case 1:
             return 1
         default:
@@ -202,11 +210,33 @@ extension MeViewController: UITableViewDataSource {
         case 0:
             let cell = UITableViewCell()
             var content = cell.defaultContentConfiguration()
-            content.image = UIImage(systemName: "bookmark.fill")
-            content.text = String(localized: "me.bookmarks")
+            var showDot = false
+            switch indexPath.row {
+            case 0:
+                content.image = UIImage(systemName: "bell.fill")
+                content.text = String(localized: "me.notifications")
+                showDot = notificationPoller?.hasUnreadNotifications ?? false
+            case 1:
+                content.image = UIImage(systemName: "envelope.fill")
+                content.text = String(localized: "me.messages")
+                showDot = notificationPoller?.hasUnreadMessages ?? false
+            case 2:
+                content.image = UIImage(systemName: "bookmark.fill")
+                content.text = String(localized: "me.bookmarks")
+            default:
+                break
+            }
             content.imageProperties.tintColor = .tintColor
             cell.contentConfiguration = content
             cell.accessoryType = .disclosureIndicator
+
+            if showDot {
+                let dot = UIView(frame: CGRect(x: 0, y: 0, width: 10, height: 10))
+                dot.backgroundColor = .systemRed
+                dot.layer.cornerRadius = 5
+                cell.accessoryView = dot
+            }
+
             return cell
 
         case 1:
@@ -236,9 +266,22 @@ extension MeViewController: UITableViewDelegate {
 
         switch indexPath.section {
         case 0:
-            guard let username = viewModel.currentUser?.username else { return }
-            let vc = BookmarksViewController(api: api, username: username)
-            navigationController?.pushViewController(vc, animated: true)
+            switch indexPath.row {
+            case 0:
+                notificationPoller?.clearNotifications()
+                let vc = NotificationsViewController(api: api, authGate: authGate)
+                navigationController?.pushViewController(vc, animated: true)
+            case 1:
+                notificationPoller?.clearMessages()
+                let vc = MessagesViewController(api: api, authGate: authGate)
+                navigationController?.pushViewController(vc, animated: true)
+            case 2:
+                guard let username = viewModel.currentUser?.username else { return }
+                let vc = BookmarksViewController(api: api, username: username)
+                navigationController?.pushViewController(vc, animated: true)
+            default:
+                break
+            }
         case 1:
             let isLoggedIn = authGate?.isAuthenticated() ?? false
             if isLoggedIn {

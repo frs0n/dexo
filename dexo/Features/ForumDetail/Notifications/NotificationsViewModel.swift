@@ -28,4 +28,16 @@ final class NotificationsViewModel {
         }
         isLoading = false
     }
+
+    func markRead(id: Int) async {
+        try? await api.markNotificationRead(id: id)
+        if let index = notifications.firstIndex(where: { $0.id == id }) {
+            notifications[index] = notifications[index].markedAsRead()
+        }
+    }
+
+    func markAllRead() async {
+        try? await api.markNotificationRead()
+        notifications = notifications.map { $0.markedAsRead() }
+    }
 }

@@ -34,6 +34,10 @@ struct DiscourseNotification: Decodable, Identifiable {
         case topicId = "topic_id"
     }
 
+    func markedAsRead() -> DiscourseNotification {
+        DiscourseNotification(id: id, notificationType: notificationType, read: true, createdAt: createdAt, topicId: topicId, slug: slug, data: data)
+    }
+
     struct NotificationData: Decodable {
         let topicTitle: String?
         let displayUsername: String?

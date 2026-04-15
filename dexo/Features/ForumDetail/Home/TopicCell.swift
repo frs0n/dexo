@@ -158,19 +158,18 @@ final class TopicCell: UITableViewCell {
             return
         }
         let matches = Self.emojiPattern.matches(in: title, range: NSRange(title.startIndex..., in: title))
-        guard !matches.isEmpty, matches.contains(where: {
-            let code = (title as NSString).substring(with: $0.range(at: 1))
-            return EmojiStore.url(for: code) != nil
-        }) else {
+        guard !matches.isEmpty else {
             titleLabel.attributedText = nil
             titleLabel.text = title
             return
         }
 
+        // Single pass: build attributed string and check for resolvable emojis at the same time
         let result = NSMutableAttributedString()
         let titleFont = titleLabel.font ?? .systemFont(ofSize: 16, weight: .medium)
         let attrs: [NSAttributedString.Key: Any] = [.font: titleFont]
         var lastEnd = title.startIndex
+        var hasEmoji = false
 
         for match in matches {
             guard let fullRange = Range(match.range, in: title),
@@ -179,33 +178,35 @@ final class TopicCell: UITableViewCell {
 
             let code = String(title[codeRange])
 
-            // Append text before this match
             if lastEnd < fullRange.lowerBound {
                 result.append(NSAttributedString(string: String(title[lastEnd..<fullRange.lowerBound]), attributes: attrs))
             }
 
             if let urlString = EmojiStore.url(for: code), let url = URL(string: urlString) {
-                // Emoji image attachment
                 let attachment = EmojiTextAttachment()
                 attachment.emojiURL = url
                 attachment.bounds = CGRect(x: 0, y: titleFont.descender, width: titleFont.lineHeight, height: titleFont.lineHeight)
                 result.append(NSAttributedString(attachment: attachment))
+                hasEmoji = true
             } else {
-                // No URL found — keep original text
                 result.append(NSAttributedString(string: String(title[fullRange]), attributes: attrs))
             }
 
             lastEnd = fullRange.upperBound
         }
 
-        // Append remaining text
+        // No resolvable emojis found — use plain text (cheaper for UILabel)
+        guard hasEmoji else {
+            titleLabel.attributedText = nil
+            titleLabel.text = title
+            return
+        }
+
         if lastEnd < title.endIndex {
             result.append(NSAttributedString(string: String(title[lastEnd...]), attributes: attrs))
         }
 
         titleLabel.attributedText = result
-
-        // Load emoji images
         loadEmojiImages(in: result)
     }
 
@@ -215,9 +216,8 @@ final class TopicCell: UITableViewCell {
             SDWebImageManager.shared.loadImage(with: url, progress: nil) { [weak self] image, _, _, _, _, _ in
                 guard let image, let self else { return }
                 attachment.image = image
+                // Redraw the label only — avoid full cell layout recalculation
                 self.titleLabel.setNeedsDisplay()
-                // Force layout update so the label redraws with the loaded image
-                self.setNeedsLayout()
             }
         }
     }
@@ -235,12 +235,20 @@ final class TopicCell: UITableViewCell {
         )
     }
 
+    private static let isoFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .abbreviated
+        return f
+    }()
+
     private static func formatDate(_ isoString: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        guard let date = formatter.date(from: isoString) else { return isoString }
-        let relative = RelativeDateTimeFormatter()
-        relative.unitsStyle = .abbreviated
-        return relative.localizedString(for: date, relativeTo: Date())
+        guard let date = isoFormatter.date(from: isoString) else { return isoString }
+        return relativeFormatter.localizedString(for: date, relativeTo: Date())
     }
 }

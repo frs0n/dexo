@@ -10,6 +10,10 @@ final class PostNativeCell: UITableViewCell {
 
     weak var delegate: PostCellDelegate?
     private(set) var postId: Int = 0
+    /// Tracks which post's content views are currently rendered in contentStackView.
+    /// Kept separate from `postId` so prepareForReuse can reset metadata without
+    /// forcing a full content rebuild on the next configure call.
+    private var renderedContentPostId: Int = 0
     private var postLink: String?
     private var currentPost: DiscourseTopicDetail.Post?
     private var validReactions: [String] = []
@@ -207,6 +211,21 @@ final class PostNativeCell: UITableViewCell {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func layoutSubviews() {
+        let t0 = CACurrentMediaTime()
+        super.layoutSubviews()
+        let ms = (CACurrentMediaTime() - t0) * 1000
+        if ms > 3 { FrameDropDetector.shared.log("layoutSubviews post#\(postId) \(String(format: "%.1f", ms))ms") }
+    }
+
+    override func systemLayoutSizeFitting(_ targetSize: CGSize, withHorizontalFittingPriority horizontalFittingPriority: UILayoutPriority, verticalFittingPriority: UILayoutPriority) -> CGSize {
+        let t0 = CACurrentMediaTime()
+        let size = super.systemLayoutSizeFitting(targetSize, withHorizontalFittingPriority: horizontalFittingPriority, verticalFittingPriority: verticalFittingPriority)
+        let ms = (CACurrentMediaTime() - t0) * 1000
+        if ms > 3 { FrameDropDetector.shared.log("sizeFitting post#\(postId) \(String(format: "%.1f", ms))ms → h=\(String(format: "%.0f", size.height))") }
+        return size
+    }
+
     private func setupViews() {
         contentView.addSubview(avatarImageView)
         contentView.addSubview(flairImageView)
@@ -309,9 +328,15 @@ final class PostNativeCell: UITableViewCell {
         avatarImageView.addGestureRecognizer(avatarTap)
     }
 
+    /// The current content block views in the stack, for VC-level caching.
+    var currentContentViews: [UIView] {
+        contentStackView.arrangedSubviews
+    }
+
     func configure(
         with post: DiscourseTopicDetail.Post,
         annotatedBlocks: [AnnotatedBlock],
+        cachedContentViews: [UIView]?,
         config: NativeRenderConfig,
         delegate: PostCellDelegate?,
         floorNumber: Int,
@@ -414,16 +439,47 @@ final class PostNativeCell: UITableViewCell {
         bookmarkButton.setImage(UIImage(systemName: bookmarkSymbol, withConfiguration: bookmarkConfig), for: .normal)
         bookmarkButton.tintColor = post.bookmarked ? .systemYellow : .tertiaryLabel
 
-        // Render content blocks
-        contentStackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        let views = NativeContentRenderer.renderBlocks(annotatedBlocks, config: config, delegate: delegate) { name in
-            guard let poll = post.polls.first(where: { $0.name == name }) else { return nil }
-            let voted = Set(post.pollsVotes[name] ?? [])
-            return (poll, voted, post)
-        }
-        for view in views {
-            setupTextViews(in: view)
-            contentStackView.addArrangedSubview(view)
+        // Render content blocks — three tiers of reuse:
+        // 1. Same cell + same post → skip entirely (cheapest)
+        // 2. VC-level cached views → reparent existing views (no renderBlocks)
+        // 3. Full render from scratch (most expensive)
+        if post.id == renderedContentPostId {
+            // Tier 1: same cell, same post — just fix up delegates
+            FrameDropDetector.shared.log("reuse post#\(post.id) (same cell)")
+            reassignTextViewDelegates(in: contentStackView)
+        } else if let cached = cachedContentViews {
+            // Tier 2: views were rendered before, reparent them
+            let t0 = CACurrentMediaTime()
+            cancelContentImageLoads()
+            contentStackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
+            for view in cached {
+                contentStackView.addArrangedSubview(view)
+            }
+            reassignTextViewDelegates(in: contentStackView)
+            renderedContentPostId = post.id
+            let ms = (CACurrentMediaTime() - t0) * 1000
+            FrameDropDetector.shared.log("cached post#\(post.id): reparent=\(String(format: "%.1f", ms))ms views=\(cached.count)")
+        } else {
+            // Tier 3: full render
+            let t0 = CACurrentMediaTime()
+            cancelContentImageLoads()
+            contentStackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
+            let t1 = CACurrentMediaTime()
+
+            let views = NativeContentRenderer.renderBlocks(annotatedBlocks, config: config, delegate: delegate) { name in
+                guard let poll = post.polls.first(where: { $0.name == name }) else { return nil }
+                let voted = Set(post.pollsVotes[name] ?? [])
+                return (poll, voted, post)
+            }
+            let t2 = CACurrentMediaTime()
+
+            for view in views {
+                setupTextViews(in: view)
+                contentStackView.addArrangedSubview(view)
+            }
+            let t3 = CACurrentMediaTime()
+            renderedContentPostId = post.id
+            FrameDropDetector.shared.log("render post#\(post.id): teardown=\(String(format: "%.1f", (t1-t0)*1000))ms renderBlocks=\(String(format: "%.1f", (t2-t1)*1000))ms addViews=\(String(format: "%.1f", (t3-t2)*1000))ms total=\(String(format: "%.1f", (t3-t0)*1000))ms")
         }
 
         if let template = post.avatarTemplate {
@@ -467,6 +523,32 @@ final class PostNativeCell: UITableViewCell {
         }
 
         reactionStackView.isHidden = false
+    }
+
+    // MARK: - Content Reuse Helpers
+
+    private func cancelContentImageLoads() {
+        for view in contentStackView.arrangedSubviews {
+            if let container = view as? TappableImageContainer {
+                container.cancelImageLoad()
+            } else if let onebox = view as? OneboxCardView {
+                onebox.cancelImageLoad()
+            } else if let video = view as? VideoCardView {
+                video.cancelImageLoad()
+            }
+        }
+    }
+
+    /// Re-attach UITextViewDelegate on existing content views after cell reuse
+    /// (delegate is nilled out in prepareForReuse).
+    private func reassignTextViewDelegates(in container: UIView) {
+        if let textView = container as? UITextView {
+            textView.delegate = self
+            return
+        }
+        for subview in container.subviews {
+            reassignTextViewDelegates(in: subview)
+        }
     }
 
     // MARK: - View Setup
@@ -668,17 +750,9 @@ final class PostNativeCell: UITableViewCell {
 
     override func prepareForReuse() {
         super.prepareForReuse()
-        // Cancel block-level image loads
-        for view in contentStackView.arrangedSubviews {
-            if let container = view as? TappableImageContainer {
-                container.cancelImageLoad()
-            } else if let onebox = view as? OneboxCardView {
-                onebox.cancelImageLoad()
-            } else if let video = view as? VideoCardView {
-                video.cancelImageLoad()
-            }
-        }
-        contentStackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        // Keep content views alive — they will be reused if the same post is
+        // reassigned, or torn down at the start of configure() otherwise.
+        // renderedContentPostId is intentionally NOT reset.
         delegate = nil
         postId = 0
         postLink = nil

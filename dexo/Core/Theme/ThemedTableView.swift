@@ -7,13 +7,16 @@ class ThemedTableView: UITableView {
         super.layoutSubviews()
         let theme = ThemeManager.shared
         let isGrouped = style == .insetGrouped || style == .grouped
-        backgroundColor = isGrouped ? theme.backgroundColor : theme.cardBackgroundColor
+        let newBG = isGrouped ? theme.backgroundColor : theme.cardBackgroundColor
+        if backgroundColor != newBG { backgroundColor = newBG }
         let cellColor = theme.cardBackgroundColor
         let selectionColor = theme.accentColor.withAlphaComponent(0.15)
         for cell in visibleCells {
-            cell.backgroundColor = cellColor
-            if cell.selectionStyle != .none {
-                let bg = cell.selectedBackgroundView ?? UIView()
+            if cell.backgroundColor != cellColor {
+                cell.backgroundColor = cellColor
+            }
+            if cell.selectionStyle != .none, cell.selectedBackgroundView == nil {
+                let bg = UIView()
                 bg.backgroundColor = selectionColor
                 cell.selectedBackgroundView = bg
             }

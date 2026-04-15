@@ -9,7 +9,14 @@ enum ParagraphRenderer: BlockRenderer {
 
     static func render(_ block: ContentBlock, config: NativeRenderConfig, delegate: PostCellDelegate?) -> UIView {
         guard case .paragraph(let inlines) = block else { return UIView() }
+        return makeTextView(
+            attributedText: inlines.attributedString(config: config.attributedStringConfig),
+            config: config
+        )
+    }
 
+    /// Creates a configured LinkTextView — also used by NativeContentRenderer for merged paragraphs.
+    static func makeTextView(attributedText: NSAttributedString, config: NativeRenderConfig) -> LinkTextView {
         let textView = LinkTextView()
         textView.isEditable = false
         textView.isScrollEnabled = false
@@ -17,7 +24,7 @@ enum ParagraphRenderer: BlockRenderer {
         textView.textContainer.lineFragmentPadding = 0
         textView.backgroundColor = .clear
         textView.dataDetectorTypes = []
-        textView.attributedText = inlines.attributedString(config: config.attributedStringConfig)
+        textView.attributedText = attributedText
         textView.linkTextAttributes = [
             .foregroundColor: config.linkColor,
         ]

@@ -38,10 +38,13 @@ final class HomeViewController: ObservableViewController {
         return tv
     }()
 
+    /// Cache hex→UIColor conversions to avoid repeated string parsing.
+    private var categoryColorCache: [String: UIColor] = [:]
+
     private lazy var dataSource: UITableViewDiffableDataSource<Int, Int> = .init(tableView: tableView) { [weak self] tableView, indexPath, topicId in
         guard let self,
               let cell = tableView.dequeueReusableCell(withIdentifier: TopicCell.reuseIdentifier, for: indexPath) as? TopicCell,
-              let topic = self.viewModel.topics.first(where: { $0.id == topicId })
+              let topic = self.viewModel.topicsById[topicId]
         else {
             return UITableViewCell()
         }
@@ -53,7 +56,13 @@ final class HomeViewController: ObservableViewController {
             avatarURL = URL(string: urlString)
         }
         let category = self.viewModel.category(for: topic)
-        let categoryColor: UIColor? = category.flatMap { Self.color(fromHex: $0.color) }
+        let categoryColor: UIColor? = category.flatMap { cat in
+            let hex = cat.color
+            if let cached = self.categoryColorCache[hex] { return cached }
+            let color = Self.color(fromHex: hex)
+            if let color { self.categoryColorCache[hex] = color }
+            return color
+        }
         cell.configure(
             with: topic,
             avatarURL: avatarURL,

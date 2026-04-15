@@ -8,8 +8,11 @@ class ObservableViewController: BaseViewController {
     func startObserving() {
         withObservationTracking {
             self.updateUI()
-        } onChange: {
-            Task { @MainActor [weak self] in
+        } onChange: { [weak self] in
+            // Use .common run-loop mode so the re-observation fires during UIScrollView
+            // tracking as well, instead of queuing up and causing a frame-drop spike
+            // when deceleration ends and the run loop returns to .default mode.
+            RunLoop.main.perform(inModes: [.common]) {
                 self?.startObserving()
             }
         }

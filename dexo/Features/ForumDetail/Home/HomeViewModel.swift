@@ -19,6 +19,9 @@ final class HomeViewModel {
     var categories: [DiscourseCategory] = []
     var selectedCategoryId: Int?
 
+    /// O(1) topic lookup by ID for cell configuration.
+    private(set) var topicsById: [Int: DiscourseTopicList.Topic] = [:]
+
     private let api: DiscourseAPI
     private var currentPage = 0
     private var usersById: [Int: DiscourseTopicList.User] = [:]
@@ -65,6 +68,7 @@ final class HomeViewModel {
             }
             _ = await categoriesResult
             topics = result.topicList.topics
+            topicsById = Dictionary(topics.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
             canLoadMore = result.topicList.moreTopicsUrl != nil
             indexUsers(result.users)
         } catch {
@@ -98,6 +102,7 @@ final class HomeViewModel {
             let existingIds = Set(topics.map(\.id))
             let newTopics = result.topicList.topics.filter { !existingIds.contains($0.id) }
             topics.append(contentsOf: newTopics)
+            for t in newTopics { topicsById[t.id] = t }
             canLoadMore = result.topicList.moreTopicsUrl != nil
             indexUsers(result.users)
         } catch {

@@ -10,12 +10,18 @@ enum ListRenderer: BlockRenderer {
     static func render(_ block: ContentBlock, config: NativeRenderConfig, delegate: PostCellDelegate?) -> UIView {
         guard case .list(let ordered, let items) = block else { return UIView() }
 
+        let indent: CGFloat = ordered ? 20 : 12
+
+        // Fast path: if ALL items are flat (paragraph-only), combine into a single UITextView.
+        // This avoids creating N separate UITextViews for long lists (e.g. 29-item link lists).
+        if items.allSatisfy({ canRenderFlat($0) }) {
+            return renderCombinedFlatList(items, ordered: ordered, indent: indent, config: config)
+        }
+
         let stack = UIStackView()
         stack.axis = .vertical
         stack.spacing = 4
         stack.translatesAutoresizingMaskIntoConstraints = false
-
-        let indent: CGFloat = ordered ? 20 : 12
 
         for (index, item) in items.enumerated() {
             let itemView = renderItem(
@@ -30,6 +36,35 @@ enum ListRenderer: BlockRenderer {
         }
 
         return stack
+    }
+
+    /// Renders all flat items as a single UITextView — O(1) views instead of O(n).
+    private static func renderCombinedFlatList(
+        _ items: [ListItem],
+        ordered: Bool,
+        indent: CGFloat,
+        config: NativeRenderConfig
+    ) -> LinkTextView {
+        let combined = NSMutableAttributedString()
+        for (index, item) in items.enumerated() {
+            if index > 0 { combined.append(NSAttributedString(string: "\n")) }
+
+            var allInlines: [InlineNode] = []
+            for (i, block) in item.blocks.enumerated() {
+                if case .paragraph(let inlines) = block {
+                    if i > 0 { allInlines.append(.lineBreak) }
+                    allInlines.append(contentsOf: inlines)
+                }
+            }
+            combined.append(makeBulletedAttributedString(
+                inlines: allInlines,
+                ordered: ordered,
+                index: index,
+                indent: indent,
+                config: config
+            ))
+        }
+        return makeTextView(attributedText: combined, config: config)
     }
 
     private static func renderItem(

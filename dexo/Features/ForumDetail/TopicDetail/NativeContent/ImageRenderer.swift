@@ -79,20 +79,7 @@ final class TappableImageContainer: UIView {
             if !hasOriginalSize {
                 let ratio = containerWidth / image.size.width
                 self.imageHeightConstraint.constant = image.size.height * ratio
-                // Notify the owning table view to update cell height without jumping
-                var view: UIView? = self.superview
-                while let v = view {
-                    if let tableView = v as? UITableView {
-                        let offset = tableView.contentOffset
-                        tableView.beginUpdates()
-                        tableView.endUpdates()
-                        if abs(tableView.contentOffset.y - offset.y) > 1 {
-                            tableView.contentOffset = offset
-                        }
-                        break
-                    }
-                    view = v.superview
-                }
+                self.scheduleCoalescedHeightUpdate()
             }
         }
 
@@ -123,6 +110,42 @@ final class TappableImageContainer: UIView {
 
     func cancelImageLoad() {
         imageView.sd_cancelCurrentImageLoad()
+    }
+
+    // MARK: - Coalesced Height Updates
+
+    /// Table views that already have a pending height update scheduled.
+    /// Multiple image loads resolving in the same run-loop pass are coalesced
+    /// into a single beginUpdates/endUpdates call.
+    private static var pendingUpdateTableViews = Set<ObjectIdentifier>()
+
+    private func scheduleCoalescedHeightUpdate() {
+        guard let tableView = findTableView() else { return }
+        let id = ObjectIdentifier(tableView)
+        guard !Self.pendingUpdateTableViews.contains(id) else { return }
+        Self.pendingUpdateTableViews.insert(id)
+        DispatchQueue.main.async { [weak tableView] in
+            Self.pendingUpdateTableViews.remove(id)
+            guard let tableView else { return }
+            let t0 = CACurrentMediaTime()
+            let offset = tableView.contentOffset
+            tableView.beginUpdates()
+            tableView.endUpdates()
+            if abs(tableView.contentOffset.y - offset.y) > 1 {
+                tableView.contentOffset = offset
+            }
+            let ms = (CACurrentMediaTime() - t0) * 1000
+            if ms > 3 { FrameDropDetector.shared.log("imageHeightUpdate \(String(format: "%.1f", ms))ms") }
+        }
+    }
+
+    private func findTableView() -> UITableView? {
+        var view: UIView? = superview
+        while let v = view {
+            if let tv = v as? UITableView { return tv }
+            view = v.superview
+        }
+        return nil
     }
 
     // MARK: - GIF Animation Control

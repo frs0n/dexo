@@ -34,6 +34,13 @@ final class TopicDetailViewModel {
         topic?.postStream.posts ?? []
     }
 
+    /// O(1) post lookup by ID — rebuilt whenever posts change.
+    private(set) var postsById: [Int: DiscourseTopicDetail.Post] = [:]
+
+    func rebuildPostsById() {
+        postsById = Dictionary(posts.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+    }
+
     var opUsername: String? {
         firstPost?.username ?? posts.first?.username
     }
@@ -86,6 +93,7 @@ final class TopicDetailViewModel {
         isReady = false
         errorMessage = nil
         parsedBlocks = [:]
+        postsById = [:]
         do {
             let detail = try await api.fetchTopic(id: id)
             topic = detail
@@ -249,6 +257,7 @@ final class TopicDetailViewModel {
         // Clear current posts
         topic?.postStream.posts.removeAll()
         parsedBlocks.removeAll()
+        postsById.removeAll()
         loadedPostIds.removeAll()
         firstPost = nil
 
@@ -295,6 +304,7 @@ final class TopicDetailViewModel {
         topic.postStream.posts[index].canBoost = false
         expandedBoostPostIds.insert(postId)
         self.topic = topic
+        postsById[postId] = topic.postStream.posts[index]
     }
 
     func toggleBoosts(forPostId postId: Int) {
@@ -314,6 +324,7 @@ final class TopicDetailViewModel {
             expandedBoostPostIds.remove(postId)
         }
         self.topic = topic
+        postsById[postId] = topic.postStream.posts[index]
     }
 
     func updatePoll(_ updatedPoll: DiscourseTopicDetail.Poll, votes: [String], forPostId postId: Int, pollName: String) {
@@ -347,5 +358,6 @@ final class TopicDetailViewModel {
     private func parseAndStore(post: DiscourseTopicDetail.Post) {
         let annotated = CookedHTMLParser.parseAnnotated(html: post.cooked, baseURL: api.baseURL)
         parsedBlocks[post.id] = annotated
+        postsById[post.id] = post
     }
 }

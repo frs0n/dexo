@@ -9,6 +9,49 @@ private nonisolated enum TopicDetailItem: Hashable, Sendable {
     case boosts(Int)
 }
 
+// MARK: - Frame Drop Detector (temporary perf debugging)
+final class FrameDropDetector {
+    private var displayLink: CADisplayLink?
+    private var lastTimestamp: CFTimeInterval = 0
+    /// Collects [PERF] messages between frames; flushed only when a drop is detected.
+    private(set) var pendingLogs: [String] = []
+
+    static let shared = FrameDropDetector()
+
+    func start() {
+        guard displayLink == nil else { return }
+        let link = CADisplayLink(target: self, selector: #selector(tick))
+        link.add(to: .main, forMode: .common)
+        displayLink = link
+    }
+
+    func stop() {
+        displayLink?.invalidate()
+        displayLink = nil
+    }
+
+    func log(_ message: String) {
+        pendingLogs.append(message)
+    }
+
+    @objc private func tick(_ link: CADisplayLink) {
+        defer {
+            lastTimestamp = link.timestamp
+            pendingLogs.removeAll(keepingCapacity: true)
+        }
+        guard lastTimestamp > 0 else { return }
+        let elapsed = (link.timestamp - lastTimestamp) * 1000
+        // 60fps = 16.6ms per frame; flag anything over 25ms (~1.5 frames)
+        if elapsed > 25 {
+            let dropped = Int(elapsed / 16.6) - 1
+            print("🔴 [PERF] FRAME DROP: \(String(format: "%.1f", elapsed))ms (~\(dropped) frames dropped)")
+            for msg in pendingLogs {
+                print("   ↳ \(msg)")
+            }
+        }
+    }
+}
+
 final class TopicDetailViewController: ObservableViewController {
     private let viewModel: TopicDetailViewModel
     private let api: DiscourseAPI
@@ -19,6 +62,9 @@ final class TopicDetailViewController: ObservableViewController {
     private var isLoadingEarlierLocally = false
     private var pendingScrollToFloor: Int?
     private var lastScrollOffset: CGFloat = 0
+    /// VC-level cache of rendered content views keyed by post ID.
+    /// Avoids re-creating the entire view tree when scrolling back to a post.
+    private var contentViewCache: [Int: [UIView]] = [:]
     /// Suppress load-earlier after a jump until user scrolls down first
     private var suppressLoadEarlier = false
     /// Anchor info for restoring scroll position after loading earlier posts
@@ -43,32 +89,30 @@ final class TopicDetailViewController: ObservableViewController {
 
         switch item {
         case .post(let postId):
-            guard let post = self.viewModel.posts.first(where: { $0.id == postId }),
+            let cellStart = CACurrentMediaTime()
+            guard let post = self.viewModel.postsById[postId],
                   let annotatedBlocks = self.viewModel.parsedBlocks[postId],
                   let cell = tableView.dequeueReusableCell(withIdentifier: PostNativeCell.reuseIdentifier, for: indexPath) as? PostNativeCell
             else {
                 return UITableViewCell()
             }
-            let visiblePosts = self.viewModel.visiblePosts
             let floorNumber: Int
-            if self.viewModel.isFilteringByOP {
-                floorNumber = (visiblePosts.firstIndex(where: { $0.id == postId }) ?? 0) + 1
+            // Use stream-based floor number (O(1) dictionary lookup) when not filtering
+            let allPostIds = self.viewModel.allPostIds
+            if !self.viewModel.isFilteringByOP, let streamIndex = allPostIds.firstIndex(of: postId) {
+                floorNumber = streamIndex + 1
             } else {
-                // Use stream-based floor number when not filtering
-                let allPostIds = self.viewModel.allPostIds
-                if let streamIndex = allPostIds.firstIndex(of: postId) {
-                    floorNumber = streamIndex + 1
-                } else {
-                    floorNumber = (visiblePosts.firstIndex(where: { $0.id == postId }) ?? 0) + 1
-                }
+                floorNumber = (self.viewModel.visiblePosts.firstIndex(where: { $0.id == postId }) ?? 0) + 1
             }
             let postLink = "\(self.baseURL)/t/\(self.topicId)/\(post.postNumber)"
             let config = NativeRenderConfig.default(contentWidth: tableView.bounds.width - 24, baseURL: self.baseURL)
             let isBoostsExpanded = self.viewModel.expandedBoostPostIds.contains(postId)
             let showsSeparator = !isBoostsExpanded
+            let cachedViews = self.contentViewCache[postId]
             cell.configure(
                 with: post,
                 annotatedBlocks: annotatedBlocks,
+                cachedContentViews: cachedViews,
                 config: config,
                 delegate: self,
                 floorNumber: floorNumber,
@@ -79,10 +123,17 @@ final class TopicDetailViewController: ObservableViewController {
                 isBoostsExpanded: isBoostsExpanded,
                 showsSeparator: showsSeparator,
             )
+            // Cache newly rendered views for future reuse
+            if cachedViews == nil {
+                self.contentViewCache[postId] = cell.currentContentViews
+            }
+            let cellEnd = CACurrentMediaTime()
+            let ms = (cellEnd - cellStart) * 1000
+            if ms > 2 { FrameDropDetector.shared.log("cellForRow post#\(postId) \(String(format: "%.1f", ms))ms blocks=\(annotatedBlocks.count) cached=\(cachedViews != nil)") }
             return cell
 
         case .boosts(let postId):
-            guard let post = self.viewModel.posts.first(where: { $0.id == postId }),
+            guard let post = self.viewModel.postsById[postId],
                   let cell = tableView.dequeueReusableCell(withIdentifier: BoostCell.reuseIdentifier, for: indexPath) as? BoostCell
             else {
                 return UITableViewCell()
@@ -206,6 +257,7 @@ final class TopicDetailViewController: ObservableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        FrameDropDetector.shared.start()
         navigationItem.largeTitleDisplayMode = .never
         title = String(localized: "topic_detail.default_title")
 //        tableView.tableFooterView = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: CGFloat.leastNormalMagnitude))
@@ -288,6 +340,11 @@ final class TopicDetailViewController: ObservableViewController {
     }
 
     override func updateUI() {
+        let uiStart = CACurrentMediaTime()
+        defer {
+            let ms = (CACurrentMediaTime() - uiStart) * 1000
+            if ms > 1 { FrameDropDetector.shared.log("updateUI \(String(format: "%.1f", ms))ms") }
+        }
         // Title header (set once, but rebuild when canLoadEarlier changes after a jump)
         if let topic = viewModel.topic, !hasTitleHeader {
             let displayTitle = topic.fancyTitle ?? topic.title
@@ -731,6 +788,7 @@ extension TopicDetailViewController: TopicDetailBottomBarDelegate {
             self.hasTitleHeader = false
             self.suppressLoadEarlier = true
             self.cellHeightCache.removeAll()
+            self.contentViewCache.removeAll()
             Task {
                 await self.viewModel.jumpToFloor(floor, containerWidth: self.view.bounds.width)
                 self.hideJumpOverlay()
@@ -778,6 +836,11 @@ extension TopicDetailViewController: UITableViewDelegate {
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        let scrollStart = CACurrentMediaTime()
+        defer {
+            let ms = (CACurrentMediaTime() - scrollStart) * 1000
+            if ms > 2 { FrameDropDetector.shared.log("scrollViewDidScroll \(String(format: "%.1f", ms))ms") }
+        }
         guard let header = tableView.tableHeaderView else { return }
         let headerBottom = header.frame.maxY
         let offsetY = scrollView.contentOffset.y + scrollView.safeAreaInsets.top

@@ -46,6 +46,7 @@ final class RepliesViewController: BaseViewController {
             cell.configure(
                 with: post,
                 annotatedBlocks: annotatedBlocks,
+                cachedContentViews: nil,
                 config: config,
                 delegate: self,
                 floorNumber: floorNumber,

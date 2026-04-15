@@ -8,6 +8,31 @@ final class PostNativeCell: UITableViewCell {
     static let bottomBarHeight: CGFloat = 30
     private static let symbolConfig = UIImage.SymbolConfiguration(pointSize: 11, weight: .medium)
 
+    /// Pre-rendered OP badge image with rounded corners (cached once).
+    private static let opBadgeImage: UIImage = {
+        let text = "OP"
+        let font = UIFont.systemFont(ofSize: 10, weight: .bold)
+        let textSize = (text as NSString).size(withAttributes: [.font: font])
+        let padding = UIEdgeInsets(top: 1.5, left: 4, bottom: 1.5, right: 4)
+        let size = CGSize(
+            width: ceil(textSize.width + padding.left + padding.right),
+            height: ceil(textSize.height + padding.top + padding.bottom)
+        )
+        return UIGraphicsImageRenderer(size: size).image { ctx in
+            let rect = CGRect(origin: .zero, size: size)
+            let path = UIBezierPath(roundedRect: rect, cornerRadius: 3)
+            UIColor.systemBlue.setFill()
+            path.fill()
+            let style = NSMutableParagraphStyle()
+            style.alignment = .center
+            text.draw(in: rect.inset(by: padding), withAttributes: [
+                .font: font,
+                .foregroundColor: UIColor.white,
+                .paragraphStyle: style,
+            ])
+        }
+    }()
+
     weak var delegate: PostCellDelegate?
     private(set) var postId: Int = 0
     /// Tracks which post's content views are currently rendered in contentStackView.
@@ -360,16 +385,16 @@ final class PostNativeCell: UITableViewCell {
                 attributes: [.font: UIFont.systemFont(ofSize: 14, weight: .semibold)]
             )
             attr.append(NSAttributedString(string: "  "))
-            let badge = NSAttributedString(
-                string: " OP ",
-                attributes: [
-                    .font: UIFont.systemFont(ofSize: 10, weight: .bold),
-                    .foregroundColor: UIColor.white,
-                    .backgroundColor: UIColor.systemBlue,
-                    .baselineOffset: 1,
-                ]
+            let attachment = NSTextAttachment()
+            attachment.image = Self.opBadgeImage
+            let nameFont = UIFont.systemFont(ofSize: 14, weight: .semibold)
+            attachment.bounds = CGRect(
+                x: 0,
+                y: (nameFont.capHeight - Self.opBadgeImage.size.height) / 2,
+                width: Self.opBadgeImage.size.width,
+                height: Self.opBadgeImage.size.height
             )
-            attr.append(badge)
+            attr.append(NSAttributedString(attachment: attachment))
             nameLabel.attributedText = attr
         } else {
             nameLabel.attributedText = nil

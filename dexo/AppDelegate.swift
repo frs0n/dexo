@@ -21,6 +21,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             }
         }
         LightboxConfig.preload = 2
+        LightboxConfig.makeLoadingIndicator = {
+            let indicator = UIActivityIndicatorView(style: .large)
+            indicator.color = .white
+            indicator.startAnimating()
+            return indicator
+        }
 
         return true
     }

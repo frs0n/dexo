@@ -1,6 +1,3 @@
 What to Test
 
 - 优化滚动流畅度
-- 增加通知和私信功能
-- 增加 boost 弹幕功能
-- 适配 iPad

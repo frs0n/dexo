@@ -1,5 +1,5 @@
 {
-  "originHash" : "c5420036742cd2286cc103466f5e00f65d920fd1c0e1439d4ebc9cad08b3c117",
+  "originHash" : "d68305a0d8f374c5f0bb8505fd972b08166529e69f69902a8b82fc8cb6191778",
   "pins" : [
     {
       "identity" : "alamofire",
@@ -56,12 +56,39 @@
       }
     },
     {
+      "identity" : "swift-perception",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pointfreeco/swift-perception.git",
+      "state" : {
+        "revision" : "25ac73741c3436605d61eceb5207e896973918e7",
+        "version" : "2.0.10"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax",
+      "state" : {
+        "revision" : "2b59c0c741e9184ab057fd22950b491076d42e91",
+        "version" : "603.0.0"
+      }
+    },
+    {
       "identity" : "swiftsoup",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/scinfu/SwiftSoup.git",
       "state" : {
         "revision" : "fd541c4b3fa7dcec2e7cfe049505b6e4382cd66b",
         "version" : "2.13.2"
+      }
+    },
+    {
+      "identity" : "xctest-dynamic-overlay",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pointfreeco/xctest-dynamic-overlay",
+      "state" : {
+        "revision" : "dfd70507def84cb5fb821278448a262c6ff2bbad",
+        "version" : "1.9.0"
       }
     }
   ],

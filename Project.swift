@@ -49,6 +49,7 @@ let project = Project(
                 .external(name: "Lightbox"),
                 .package(product: "CookedHTML"),
                 .external(name: "DanmakuKit"),
+                .external(name: "Perception"),
             ],
             settings: .settings(
                 base: [

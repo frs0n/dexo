@@ -1,6 +1,8 @@
 import Foundation
 
-@Observable
+import Perception
+
+@Perceptible
 final class AddForumViewModel {
     var urlString = ""
     var isLoading = false

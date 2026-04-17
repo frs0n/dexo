@@ -39,7 +39,9 @@ enum TopicDraftStore {
     }
 }
 
-@Observable
+import Perception
+
+@Perceptible
 final class TopicComposerViewModel {
     var title: String = ""
     var body: String = ""

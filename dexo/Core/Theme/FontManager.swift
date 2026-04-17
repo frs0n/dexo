@@ -1,6 +1,8 @@
 import UIKit
 
-@Observable
+import Perception
+
+@Perceptible
 final class FontManager {
     static let shared = FontManager()
     static let fontDidChangeNotification = Notification.Name("FontDidChange")

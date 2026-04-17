@@ -29,31 +29,29 @@ final class TagPickerViewController: BaseViewController, UISearchBarDelegate {
         return tv
     }()
 
-    private lazy var dataSource: UITableViewDiffableDataSource<Int, String> = {
-        UITableViewDiffableDataSource<Int, String>(tableView: tableView) { [weak self] tableView, indexPath, identifier in
-            guard let self else { return UITableViewCell() }
-            let cell = tableView.dequeueReusableCell(withIdentifier: "Cell") ?? UITableViewCell(style: .value1, reuseIdentifier: "Cell")
+    private lazy var dataSource: UITableViewDiffableDataSource<Int, String> = .init(tableView: tableView) { [weak self] tableView, _, identifier in
+        guard let self else { return UITableViewCell() }
+        let cell = tableView.dequeueReusableCell(withIdentifier: "Cell") ?? UITableViewCell(style: .value1, reuseIdentifier: "Cell")
 
-            if identifier == Self.clearItem {
-                var content = cell.defaultContentConfiguration()
-                content.text = String(localized: "search.tag_picker.clear")
-                content.image = UIImage(systemName: "xmark.circle")
-                content.imageProperties.tintColor = .systemRed
-                cell.contentConfiguration = content
-                cell.accessoryType = .none
-            } else if let tag = self.tags.first(where: { $0.text == identifier }) {
-                var content = cell.defaultContentConfiguration()
-                content.text = "#\(tag.text)"
-                content.textProperties.font = FontManager.shared.font(size: 16, weight: .medium)
-                content.secondaryText = "\(tag.count)"
-                content.secondaryTextProperties.color = .secondaryLabel
-                cell.contentConfiguration = content
-                cell.accessoryType = tag.text == self.currentTag ? .checkmark : .none
-            }
-
-            return cell
+        if identifier == Self.clearItem {
+            var content = cell.defaultContentConfiguration()
+            content.text = String(localized: "search.tag_picker.clear")
+            content.image = UIImage(systemName: "xmark.circle")
+            content.imageProperties.tintColor = .systemRed
+            cell.contentConfiguration = content
+            cell.accessoryType = .none
+        } else if let tag = self.tags.first(where: { $0.text == identifier }) {
+            var content = cell.defaultContentConfiguration()
+            content.text = "#\(tag.text)"
+            content.textProperties.font = FontManager.shared.font(size: 16, weight: .medium)
+            content.secondaryText = "\(tag.count)"
+            content.secondaryTextProperties.color = .secondaryLabel
+            cell.contentConfiguration = content
+            cell.accessoryType = tag.text == self.currentTag ? .checkmark : .none
         }
-    }()
+
+        return cell
+    }
 
     private let emptyLabel: UILabel = {
         let label = UILabel()

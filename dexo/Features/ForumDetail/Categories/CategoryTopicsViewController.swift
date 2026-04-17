@@ -1,6 +1,8 @@
 import UIKit
 
-@Observable
+import Perception
+
+@Perceptible
 private final class CategoryTopicsViewModel {
     var topics: [DiscourseTopicList.Topic] = []
     var isLoading = false

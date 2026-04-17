@@ -1,6 +1,8 @@
 import Foundation
 
-@Observable
+import Perception
+
+@Perceptible
 final class ForumListViewModel {
     var forums: [ForumInstance] = []
     var isLoading = false

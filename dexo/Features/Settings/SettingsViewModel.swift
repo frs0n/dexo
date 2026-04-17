@@ -1,6 +1,8 @@
 import Foundation
 
-@Observable
+import Perception
+
+@Perceptible
 final class SettingsViewModel {
     // Reserved for future settings state
 }

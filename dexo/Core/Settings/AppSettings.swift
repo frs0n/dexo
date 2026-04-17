@@ -1,6 +1,8 @@
 import UIKit
 
-@Observable
+import Perception
+
+@Perceptible
 final class AppSettings {
     static let shared = AppSettings()
 

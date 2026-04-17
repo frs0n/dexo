@@ -1,6 +1,8 @@
 import Foundation
 
-@Observable
+import Perception
+
+@Perceptible
 final class MessagesViewModel {
     var messages: [DiscourseTopicList.Topic] = []
     var users: [DiscourseTopicList.User] = []

@@ -2,7 +2,9 @@ import Foundation
 import UIKit
 import CookedHTML
 
-@Observable
+import Perception
+
+@Perceptible
 final class TopicDetailViewModel {
     var topic: DiscourseTopicDetail?
     var parsedBlocks: [Int: [AnnotatedBlock]] = [:]

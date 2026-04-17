@@ -1,6 +1,8 @@
 import Foundation
 
-@Observable
+import Perception
+
+@Perceptible
 final class CategoriesViewModel {
     var categories: [DiscourseCategory] = []
     var isLoading = false

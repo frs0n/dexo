@@ -1,6 +1,8 @@
 import Foundation
 
-@Observable
+import Perception
+
+@Perceptible
 final class BookmarksViewModel {
     var bookmarks: [DiscourseBookmark] = []
     var isLoading = false

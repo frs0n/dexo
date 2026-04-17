@@ -1,4 +1,5 @@
 import AuthenticationServices
+import Perception
 import UIKit
 
 final class ForumContainerViewController: BaseViewController, AuthGating {
@@ -35,7 +36,7 @@ final class ForumContainerViewController: BaseViewController, AuthGating {
     }
 
     private func startObservingAuth() {
-        withObservationTracking {
+        withPerceptionTracking {
             _ = self.authManager.isAuthenticated(for: self.forum.baseURL)
             _ = self.authManager.username(for: self.forum.baseURL)
         } onChange: {
@@ -74,7 +75,7 @@ final class ForumContainerViewController: BaseViewController, AuthGating {
 
     private func observeUnreadBadge() {
         guard let poller = notificationPoller else { return }
-        withObservationTracking {
+        withPerceptionTracking {
             _ = poller.hasAnyUnread
         } onChange: {
             Task { @MainActor [weak self] in

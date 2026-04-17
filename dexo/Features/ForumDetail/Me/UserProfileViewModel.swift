@@ -1,6 +1,8 @@
 import Foundation
 
-@Observable
+import Perception
+
+@Perceptible
 final class UserProfileViewModel {
     var userProfile: DiscourseUserProfile?
     var summary: DiscourseUserSummary?

@@ -6,7 +6,9 @@ enum HomeListMode {
     case top
 }
 
-@Observable
+import Perception
+
+@Perceptible
 final class HomeViewModel {
     var listMode: HomeListMode = .latest
     var topics: [DiscourseTopicList.Topic] = []

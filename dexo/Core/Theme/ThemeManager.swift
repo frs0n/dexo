@@ -132,7 +132,9 @@ struct CustomThemeScheme: Codable, Identifiable, Equatable {
 
 // MARK: - Theme Manager
 
-@Observable
+import Perception
+
+@Perceptible
 final class ThemeManager {
     static let shared = ThemeManager()
     static let themeDidChangeNotification = Notification.Name("ThemeDidChange")

@@ -1,3 +1,4 @@
+import Perception
 import UIKit
 
 class ObservableViewController: BaseViewController {
@@ -6,7 +7,7 @@ class ObservableViewController: BaseViewController {
     }
 
     func startObserving() {
-        withObservationTracking {
+        withPerceptionTracking {
             debugLog("self.updateUI()")
             self.updateUI()
         } onChange: { [weak self] in

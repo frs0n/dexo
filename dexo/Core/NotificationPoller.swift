@@ -7,7 +7,9 @@ import UIKit
 ///   plus a MessageBus poll with -1 to seed channel positions.
 /// - Subsequent polls: continuous long-poll loop (request immediately after response).
 /// - 3 s delay before first poll on start / foreground resume.
-@Observable
+import Perception
+
+@Perceptible
 final class NotificationPoller {
     var hasUnreadNotifications = false
     var hasUnreadMessages = false

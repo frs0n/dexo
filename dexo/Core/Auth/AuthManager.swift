@@ -1,7 +1,8 @@
 import AuthenticationServices
 import Foundation
+import Perception
 
-@Observable
+@Perceptible
 final class AuthManager: @unchecked Sendable {
     static let shared = AuthManager()
 
@@ -208,7 +209,8 @@ final class AuthManager: @unchecked Sendable {
     /// Cleans up web login artifacts (cookies, user agent, CSRF) before switching to API key auth.
     private func cleanupWebAuthData(for baseURL: String) {
         if let existingKey = KeychainHelper.getUserApiKey(for: baseURL),
-           existingKey == AuthManager.webAuthSentinel {
+           existingKey == AuthManager.webAuthSentinel
+        {
             // Server-side session cleanup
             if let username = usernameCache[baseURL] {
                 let api = DiscourseAPI(baseURL: baseURL)
@@ -222,7 +224,8 @@ final class AuthManager: @unchecked Sendable {
     /// Cleans up API key artifacts (revoke key, delete RSA pair) before switching to web auth.
     private func cleanupApiKeyAuthData(for baseURL: String) {
         if let existingKey = KeychainHelper.getUserApiKey(for: baseURL),
-           existingKey != AuthManager.webAuthSentinel {
+           existingKey != AuthManager.webAuthSentinel
+        {
             // Revoke the API key on the server
             let api = DiscourseAPI(baseURL: baseURL)
             Task { await api.revokeApiKey(apiKey: existingKey) }

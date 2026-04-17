@@ -1,6 +1,8 @@
 import Foundation
 
-@Observable
+import Perception
+
+@Perceptible
 final class UserPostsViewModel {
     enum Filter {
         case topics

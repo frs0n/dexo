@@ -12,5 +12,7 @@ let package = Package(
         .package(url: "https://github.com/hyperoslo/Lightbox.git", from: "2.5.0"),
         .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.0"),
         .package(url: "https://github.com/qyz777/DanmakuKit.git", from: "1.5.0"),
+        .package(url: "https://github.com/pointfreeco/swift-perception.git", from: "2.0.10"),
+       
     ]
 )

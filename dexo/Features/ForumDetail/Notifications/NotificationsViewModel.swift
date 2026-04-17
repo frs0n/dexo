@@ -1,6 +1,8 @@
 import Foundation
 
-@Observable
+import Perception
+
+@Perceptible
 final class NotificationsViewModel {
     var notifications: [DiscourseNotification] = []
     var isLoading = false

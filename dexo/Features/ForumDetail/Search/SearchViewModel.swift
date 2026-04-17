@@ -20,7 +20,9 @@ enum SearchSortOrder: String, CaseIterable {
     }
 }
 
-@Observable
+import Perception
+
+@Perceptible
 final class SearchViewModel {
     var searchResults: [DiscourseSearchResult.SearchPost] = []
     private(set) var topicsById: [Int: DiscourseSearchResult.SearchTopic] = [:]

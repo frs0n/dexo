@@ -151,7 +151,7 @@ extension NotificationsViewController: UITableViewDelegate {
         }
 
         if let topicId = notification.topicId {
-            let detailVC = TopicDetailViewController(api: api, topicId: topicId)
+            let detailVC = TopicDetailViewController(api: api, topicId: topicId, initialFloor: notification.postNumber)
             navigationController?.pushViewController(detailVC, animated: true)
         }
     }

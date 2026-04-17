@@ -45,7 +45,6 @@ final class MeViewController: ObservableViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        notificationPoller?.pollNow()
     }
 
     override func viewDidLoad() {

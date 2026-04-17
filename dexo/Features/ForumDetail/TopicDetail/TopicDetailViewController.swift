@@ -61,6 +61,7 @@ final class TopicDetailViewController: ObservableViewController {
     private var hasTitleHeader = false
     private var isLoadingEarlierLocally = false
     private var pendingScrollToFloor: Int?
+    private var pendingScrollIndexPath: IndexPath?
     private var lastScrollOffset: CGFloat = 0
     /// VC-level cache of rendered content views keyed by post ID.
     /// Avoids re-creating the entire view tree when scrolling back to a post.
@@ -295,16 +296,15 @@ final class TopicDetailViewController: ObservableViewController {
         ])
 
         Task {
-            // Deep-link entries (initialFloor > 1) pass the floor straight through
-            // to `loadTopic` so Discourse's `near_post_number` param can return posts
-            // centered on the target in one request — no separate jumpToFloor round
-            // trip, no parsing the OP batch just to discard it.
-            let near = (initialFloor ?? 0) > 1 ? initialFloor : nil
-            if near != nil {
-                initialFloor = nil
+            let jumpFloor = initialFloor
+            initialFloor = nil
+            await viewModel.loadTopic(id: topicId, containerWidth: view.bounds.width)
+            if let jumpFloor, jumpFloor > 1 {
                 suppressLoadEarlier = true
+                cellHeightCache.removeAll()
+                contentViewCache.removeAll()
+                await viewModel.jumpToFloor(jumpFloor, containerWidth: view.bounds.width)
             }
-            await viewModel.loadTopic(id: topicId, containerWidth: view.bounds.width, nearPostNumber: near)
         }
         Task {
             await api.loadOrFetchEmojiMap()
@@ -336,11 +336,27 @@ final class TopicDetailViewController: ObservableViewController {
             let rowCount = tableView.numberOfRows(inSection: 0)
             guard rowCount > 0 else { return }
             let safeRow = min(targetRow, rowCount - 1)
+            let indexPath = IndexPath(row: safeRow, section: 0)
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            tableView.scrollToRow(at: IndexPath(row: safeRow, section: 0), at: .top, animated: false)
+            tableView.scrollToRow(at: indexPath, at: .top, animated: false)
             CATransaction.commit()
             lastScrollOffset = tableView.contentOffset.y
+            // Schedule correction after cells render with actual heights
+            pendingScrollIndexPath = indexPath
+        }
+
+        if let indexPath = pendingScrollIndexPath {
+            // Wait until the target cell has been displayed (height cached)
+            if let item = dataSource.itemIdentifier(for: indexPath),
+               cellHeightCache[item] != nil {
+                pendingScrollIndexPath = nil
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                tableView.scrollToRow(at: indexPath, at: .top, animated: false)
+                CATransaction.commit()
+                lastScrollOffset = tableView.contentOffset.y
+            }
         }
     }
 
@@ -944,7 +960,12 @@ extension TopicDetailViewController: PostCellDelegate {
     }
 
     func postCell(didTapShowRepliesForPostId postId: Int) {
-        let repliesVC = RepliesViewController(api: api, postId: postId, topicId: topicId)
+        let repliesVC = RepliesViewController(
+            api: api,
+            postId: postId,
+            topicId: topicId,
+            validReactions: viewModel.topic?.validReactions ?? []
+        )
         if let sheet = repliesVC.sheetPresentationController {
             sheet.detents = [.medium(), .large()]
             sheet.prefersGrabberVisible = true
@@ -974,9 +995,39 @@ extension TopicDetailViewController: PostCellDelegate {
         Task {
             do {
                 try await api.toggleReaction(postId: post.id, reactionId: reactionId)
+                await refreshPost(id: post.id)
             } catch {
                 // Optimistic UI — server state will reconcile on next refresh
             }
+        }
+    }
+
+    func postCell(didToggleLikeForPost post: DiscourseTopicDetail.Post, liked: Bool) {
+        Task {
+            do {
+                if liked {
+                    try await api.likePost(postId: post.id)
+                } else {
+                    try await api.unlikePost(postId: post.id)
+                }
+                await refreshPost(id: post.id)
+            } catch {
+                // Optimistic UI — server state will reconcile on next refresh
+            }
+        }
+    }
+
+    /// Re-fetch a single post and ask the data source to reconfigure its row.
+    /// Used after like/reaction toggles since neither endpoint returns the new
+    /// post state.
+    private func refreshPost(id: Int) async {
+        guard let fresh = try? await api.fetchPost(id: id) else { return }
+        viewModel.replacePost(fresh)
+        var snapshot = dataSource.snapshot()
+        let item = TopicDetailItem.post(id)
+        if snapshot.itemIdentifiers.contains(item) {
+            snapshot.reconfigureItems([item])
+            await dataSource.apply(snapshot, animatingDifferences: false)
         }
     }
 

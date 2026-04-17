@@ -62,8 +62,8 @@ final class DiscourseAPI {
         try await request(route: .basicInfo)
     }
 
-    func fetchNotifications() async throws -> DiscourseNotificationList {
-        try await request(route: .notifications)
+    func fetchNotifications(limit: Int? = nil, filter: String? = nil) async throws -> DiscourseNotificationList {
+        try await request(route: .notifications(limit: limit, filter: filter))
     }
 
     func fetchPrivateMessages(username: String) async throws -> DiscourseTopicList {
@@ -76,6 +76,11 @@ final class DiscourseAPI {
 
     func fetchTopicPosts(topicId: Int, postIds: [Int]) async throws -> DiscourseTopicPostsResponse {
         try await request(route: .topicPosts(topicId: topicId, postIds: postIds))
+    }
+
+    /// Fetch a single post (used to refresh state after like/reaction toggle).
+    func fetchPost(id: Int) async throws -> DiscourseTopicDetail.Post {
+        try await request(route: .post(id: id))
     }
 
     func fetchPostReplies(postId: Int) async throws -> [DiscourseTopicDetail.Post] {
@@ -210,9 +215,50 @@ final class DiscourseAPI {
     func toggleReaction(postId: Int, reactionId: String) async throws {
         let route = DiscourseRouter.toggleReaction(postId: postId, reactionId: reactionId)
         let url = baseURL + route.path
-        let response = await session.request(url, method: route.method).serializingData().response
+        // Discourse rejects state-changing requests without `X-Requested-With:
+        // XMLHttpRequest` (CSRF/origin guard) → 403. The web client always
+        // sends it; mirror that here.
+        let response = await session.request(
+            url,
+            method: route.method,
+            headers: ["X-Requested-With": "XMLHttpRequest"]
+        ).serializingData().response
         if let statusCode = response.response?.statusCode, !(200 ..< 300).contains(statusCode) {
             throw DiscourseAPIError(messages: ["Failed to toggle reaction"], errorType: nil)
+        }
+    }
+
+    /// Standard Discourse "like" via PostAction (type 2). Used by the heart button.
+    func likePost(postId: Int) async throws {
+        let route = DiscourseRouter.likePost
+        let url = baseURL + route.path
+        let parameters: Parameters = [
+            "id": postId,
+            "post_action_type_id": 2,
+            "flag_topic": false,
+        ]
+        let response = await session.request(
+            url,
+            method: route.method,
+            parameters: parameters,
+            encoding: URLEncoding.default,
+            headers: ["X-Requested-With": "XMLHttpRequest"]
+        ).serializingData().response
+        if let statusCode = response.response?.statusCode, !(200 ..< 300).contains(statusCode) {
+            throw DiscourseAPIError(messages: ["Failed to like post"], errorType: nil)
+        }
+    }
+
+    func unlikePost(postId: Int) async throws {
+        let route = DiscourseRouter.unlikePost(postId: postId)
+        let url = baseURL + route.path
+        let response = await session.request(
+            url,
+            method: route.method,
+            headers: ["X-Requested-With": "XMLHttpRequest"]
+        ).serializingData().response
+        if let statusCode = response.response?.statusCode, !(200 ..< 300).contains(statusCode) {
+            throw DiscourseAPIError(messages: ["Failed to unlike post"], errorType: nil)
         }
     }
 
@@ -246,7 +292,7 @@ final class DiscourseAPI {
     func markNotificationRead(id: Int? = nil) async throws {
         let route = DiscourseRouter.markNotificationRead
         let url = baseURL + route.path
-        var parameters: Parameters? = nil
+        var parameters: Parameters?
         if let id { parameters = ["id": id] }
         let response = await session.request(url, method: route.method, parameters: parameters, encoding: JSONEncoding.default)
             .serializingData().response
@@ -276,12 +322,35 @@ final class DiscourseAPI {
         }
     }
 
-    func pollMessageBus(clientId: String, channels: [String: Int]) async throws -> [MessageBusMessage] {
+    /// Fetch the shared_session_key from the main site HTML meta tag.
+    func fetchSharedSessionKey() async -> String? {
+        guard let url = URL(string: baseURL) else { return nil }
+        var req = URLRequest(url: url)
+        req.setValue("text/html", forHTTPHeaderField: "Accept")
+        let cookieHeader = WebCookieStore.shared.cookieHeader(for: url)
+        if !cookieHeader.isEmpty { req.setValue(cookieHeader, forHTTPHeaderField: "Cookie") }
+        if let ua = WebCookieStore.shared.userAgent { req.setValue(ua, forHTTPHeaderField: "User-Agent") }
+        let response = await session.request(req).serializingData().response
+        guard let data = response.data, let html = String(data: data, encoding: .utf8) else { return nil }
+        // Extract <meta name="shared_session_key" content="...">
+        guard let range = html.range(of: #"<meta name="shared_session_key" content="([^"]+)""#, options: .regularExpression),
+              let contentRange = html[range].range(of: #"content="([^"]+)""#, options: .regularExpression)
+        else { return nil }
+        let match = html[contentRange]
+        let key = match.dropFirst(9).dropLast(1) // drop 'content="' and '"'
+        return String(key)
+    }
+
+    func pollMessageBus(clientId: String, channels: [String: Int], sharedSessionKey: String? = nil) async throws -> [MessageBusMessage] {
         let route = DiscourseRouter.messageBusPoll(clientId: clientId)
         let mbBase = baseURL.contains("linux.do") ? "https://ping.linux.do" : baseURL
         let url = mbBase + route.path
         debugLog("[MessageBus] POST \(url) channels=\(channels)")
-        let response = await session.request(url, method: route.method, parameters: channels, encoding: URLEncoding.default)
+        var headers = HTTPHeaders()
+        if let sharedSessionKey {
+            headers.add(name: "X-Shared-Session-Key", value: sharedSessionKey)
+        }
+        let response = await session.request(url, method: route.method, parameters: channels, encoding: URLEncoding.default, headers: headers)
             .serializingData().response
         if let statusCode = response.response?.statusCode, !(200 ..< 300).contains(statusCode) {
             throw DiscourseAPIError(messages: ["MessageBus poll failed"], errorType: nil)
@@ -356,7 +425,7 @@ final class DiscourseAPI {
             .response
 
         if let data = response.data, let body = String(data: data, encoding: .utf8) {
-//            debugLog("[DiscourseAPI] \(route.method.rawValue) \(url)\n\(body)")
+            debugLog("[DiscourseAPI] \(route.method.rawValue) \(url)\n\(body)")
         }
 
         if let newToken = response.response?.value(forHTTPHeaderField: "X-CSRF-Token") {
@@ -367,7 +436,8 @@ final class DiscourseAPI {
         // that would clobber the `_t` session cookie and log the user out silently.
         if let httpResponse = response.response, let url = httpResponse.url,
            let statusCode = response.response?.statusCode, (200 ..< 300).contains(statusCode),
-           KeychainHelper.getUserApiKey(for: baseURL) == AuthManager.webAuthSentinel {
+           KeychainHelper.getUserApiKey(for: baseURL) == AuthManager.webAuthSentinel
+        {
             WebCookieStore.shared.mergeResponseHeaders(httpResponse.allHeaderFields, for: url)
         }
 
@@ -444,7 +514,7 @@ private final class DiscourseAuthInterceptor: RequestInterceptor {
 
     init(baseURL: String) {
         self.baseURL = baseURL
-        authChangeObserver = NotificationCenter.default.addObserver(forName: .discourseAuthDidChange, object: nil, queue: nil) { [weak self] notification in
+        self.authChangeObserver = NotificationCenter.default.addObserver(forName: .discourseAuthDidChange, object: nil, queue: nil) { [weak self] notification in
             guard let self,
                   let changedBaseURL = notification.userInfo?["baseURL"] as? String,
                   changedBaseURL == self.baseURL else { return }

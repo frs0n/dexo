@@ -78,12 +78,9 @@ final class TopicDetailViewModel {
         return posts.firstIndex(where: { $0.id == targetId })
     }
 
-    /// Find the row index in `visiblePosts` for a given floor (1-based)
+    /// Find the row index in `visiblePosts` for a given floor (1-based post number)
     func visibleRowForFloor(_ floor: Int) -> Int? {
-        let index = floor - 1
-        guard index >= 0, index < allPostIds.count else { return nil }
-        let targetId = allPostIds[index]
-        return visiblePosts.firstIndex(where: { $0.id == targetId })
+        return visiblePosts.firstIndex(where: { $0.postNumber == floor })
     }
 
     /// Loads the topic. When `nearPostNumber > 1` is supplied, the initial batch
@@ -326,6 +323,35 @@ final class TopicDetailViewModel {
         }
         self.topic = topic
         postsById[postId] = topic.postStream.posts[index]
+    }
+
+    /// Replace a post with a freshly-fetched copy (e.g. after a like/reaction toggle).
+    /// Skips re-parsing blocks when `cooked` is unchanged so the VC's content view
+    /// cache stays valid. Plugin-only fields that the bare `/posts/{id}.json`
+    /// endpoint doesn't return (boosts, polls votes) are carried over from the
+    /// existing post so the UI doesn't lose state.
+    func replacePost(_ updated: DiscourseTopicDetail.Post) {
+        guard var topic else { return }
+        guard let index = topic.postStream.posts.firstIndex(where: { $0.id == updated.id }) else { return }
+        let existing = topic.postStream.posts[index]
+        let cookedChanged = existing.cooked != updated.cooked
+
+        var merged = updated
+        // /posts/{id}.json strips discourse-boosts plugin data — preserve it
+        // so the boost button (and any expanded boost list) stays intact.
+        merged.boosts = existing.boosts
+        merged.canBoost = existing.canBoost
+        // Polls and the user's vote selections aren't included either; without
+        // this, results would reset visually until the next full topic load.
+        merged.polls = existing.polls
+        merged.pollsVotes = existing.pollsVotes
+
+        topic.postStream.posts[index] = merged
+        self.topic = topic
+        postsById[merged.id] = merged
+        if cookedChanged {
+            parsedBlocks[merged.id] = CookedHTMLParser.parseAnnotated(html: merged.cooked, baseURL: api.baseURL)
+        }
     }
 
     func updatePoll(_ updatedPoll: DiscourseTopicDetail.Poll, votes: [String], forPostId postId: Int, pollName: String) {

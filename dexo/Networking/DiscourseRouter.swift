@@ -8,7 +8,8 @@ enum DiscourseRouter {
     case categories
     case topic(id: Int, nearPostNumber: Int? = nil)
     case topicPosts(topicId: Int, postIds: [Int])
-    case notifications
+    case post(id: Int)
+    case notifications(limit: Int? = nil, filter: String? = nil)
     case privateMessages(username: String)
     case createTopic
     case createBoost(postId: Int)
@@ -30,6 +31,8 @@ enum DiscourseRouter {
     case deleteBoost(id: Int)
     case uploadImage
     case toggleReaction(postId: Int, reactionId: String)
+    case likePost
+    case unlikePost(postId: Int)
     case votePoll
     case removePollVote
     case markNotificationRead
@@ -38,11 +41,11 @@ enum DiscourseRouter {
 
     var method: HTTPMethod {
         switch self {
-        case .createTopic, .createBookmark, .createBoost, .uploadImage, .topicTimings, .messageBusPoll:
+        case .createTopic, .createBookmark, .createBoost, .uploadImage, .topicTimings, .messageBusPoll, .likePost:
             return .post
         case .toggleReaction, .votePoll, .markNotificationRead:
             return .put
-        case .deleteBookmark, .deleteBoost, .removePollVote:
+        case .deleteBookmark, .deleteBoost, .removePollVote, .unlikePost:
             return .delete
         default:
             return .get
@@ -70,8 +73,15 @@ enum DiscourseRouter {
         case .topicPosts(let topicId, let postIds):
             let ids = postIds.map { "post_ids[]=\($0)" }.joined(separator: "&")
             return "/t/\(topicId)/posts.json?\(ids)"
-        case .notifications:
-            return "/notifications.json"
+        case .post(let id):
+            return "/posts/\(id).json"
+        case .notifications(let limit, let filter):
+            var path = "/notifications.json"
+            var params: [String] = []
+            if let limit { params.append("limit=\(limit)") }
+            if let filter { params.append("filter=\(filter)") }
+            if !params.isEmpty { path += "?" + params.joined(separator: "&") }
+            return path
         case .privateMessages(let username):
             return "/topics/private-messages/\(username).json"
         case .createTopic:
@@ -121,6 +131,11 @@ enum DiscourseRouter {
         case .toggleReaction(let postId, let reactionId):
             let encoded = reactionId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? reactionId
             return "/discourse-reactions/posts/\(postId)/custom-reactions/\(encoded)/toggle.json"
+        case .likePost:
+            return "/post_actions"
+        case .unlikePost(let postId):
+            // post_action_type_id=2 is "like"
+            return "/post_actions/\(postId)?post_action_type_id=2"
         case .votePoll:
             return "/polls/vote"
         case .removePollVote:

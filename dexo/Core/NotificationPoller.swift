@@ -23,10 +23,11 @@ final class NotificationPoller {
     private let clientId = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
     private var userId: Int?
     private var lastMessageIds: [String: Int] = [:]
+    private var sharedSessionKey: String?
     private var seeded = false
 
     private static let initialDelay: TimeInterval = 3
-    private static let pollInterval: TimeInterval = 180
+    private static let pollInterval: TimeInterval = 60
 
     init(api: DiscourseAPI, usernameProvider: @escaping () -> String?) {
         self.api = api
@@ -58,12 +59,6 @@ final class NotificationPoller {
         hasUnreadMessages = false
     }
 
-    /// Trigger an immediate poll, resetting the interval timer.
-    func pollNow() {
-        guard isActive else { return }
-        startPolling(delay: 0)
-    }
-
     // MARK: - Foreground / Background
 
     @objc private func appDidBecomeActive() {
@@ -92,9 +87,8 @@ final class NotificationPoller {
             guard self.userId != nil else { return }
 
             while !Task.isCancelled, self.isActive {
-                let success = await self.pollMessageBus()
-                let delay = Self.pollInterval
-                try? await Task.sleep(for: .seconds(delay))
+                await self.pollMessageBus()
+                try? await Task.sleep(for: .seconds(Self.pollInterval))
             }
         }
     }
@@ -109,17 +103,31 @@ final class NotificationPoller {
             hasUnreadNotifications = total > 0
             hasUnreadMessages = (user.unreadPrivateMessages ?? 0) > 0
         } else if let username = usernameProvider(), !username.isEmpty,
-                  let profile = try? await api.fetchUserProfile(username: username) {
+                  let profile = try? await api.fetchUserProfile(username: username)
+        {
             userId = profile.id
+            // currentUser returned empty — seed unread state from notifications list
+            if let list = try? await api.fetchNotifications() {
+                hasUnreadNotifications = list.notifications.contains { !$0.read }
+                hasUnreadMessages = list.notifications.contains { !$0.read && $0.notificationType == 6 }
+            }
         }
         guard userId != nil else {
             seeded = true
             return
         }
 
+        // linux.do uses a separate MessageBus domain (ping.linux.do) that requires a shared session key.
+        // Only needed for web-based login (cookie auth), not User API Key auth.
+        if api.baseURL.contains("linux.do"),
+           KeychainHelper.getUserApiKey(for: api.baseURL) == AuthManager.webAuthSentinel
+        {
+            sharedSessionKey = await api.fetchSharedSessionKey()
+        }
+
         // Seed MessageBus channel positions from /__status response
-        let channel = "/notification/\(userId!)"
-        if let msgs = try? await api.pollMessageBus(clientId: clientId, channels: [channel: -1]) {
+        let channels: [String: Int] = ["/notification/\(userId!)": -1]
+        if let msgs = try? await api.pollMessageBus(clientId: clientId, channels: channels, sharedSessionKey: sharedSessionKey) {
             for msg in msgs {
                 if let positions = msg.statusChannelPositions {
                     for (ch, pos) in positions {
@@ -131,9 +139,9 @@ final class NotificationPoller {
             }
         }
 
-        // If __status didn't include our channel, default to 0 so we don't keep sending -1
-        if lastMessageIds[channel] == nil {
-            lastMessageIds[channel] = 0
+        // Default to 0 for channels not included in __status so we don't keep sending -1
+        for ch in channels.keys where lastMessageIds[ch] == nil {
+            lastMessageIds[ch] = 0
         }
 
         seeded = true
@@ -145,9 +153,9 @@ final class NotificationPoller {
         guard let userId else { return false }
 
         let channel = "/notification/\(userId)"
-        let lastId = lastMessageIds[channel] ?? -1
+        let pollChannels = [channel: lastMessageIds[channel] ?? -1]
 
-        guard let messages = try? await api.pollMessageBus(clientId: clientId, channels: [channel: lastId]) else {
+        guard let messages = try? await api.pollMessageBus(clientId: clientId, channels: pollChannels, sharedSessionKey: sharedSessionKey) else {
             return false
         }
 
@@ -160,14 +168,13 @@ final class NotificationPoller {
                 if msg.messageId > (lastMessageIds[msg.channel] ?? -1) {
                     lastMessageIds[msg.channel] = msg.messageId
                 }
-            }
-
-            if msg.channel == channel, let data = msg.data {
-                let total = data.allUnreadNotificationsCount
-                    ?? ((data.unreadNotifications ?? 0) + (data.unreadHighPriorityNotifications ?? 0))
-                let pm = data.newPersonalMessagesNotificationsCount ?? 0
-                hasUnreadNotifications = total > 0
-                hasUnreadMessages = pm > 0
+                if msg.channel == channel, let data = msg.data {
+                    let total = data.allUnreadNotificationsCount
+                        ?? ((data.unreadNotifications ?? 0) + (data.unreadHighPriorityNotifications ?? 0))
+                    let pm = data.groupedUnreadNotifications?["6"] ?? data.newPersonalMessagesNotificationsCount ?? 0
+                    hasUnreadNotifications = total > 0
+                    hasUnreadMessages = pm > 0
+                }
             }
         }
 

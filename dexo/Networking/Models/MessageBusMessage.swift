@@ -12,6 +12,8 @@ struct MessageBusMessage: Sendable {
         let unreadHighPriorityNotifications: Int?
         let allUnreadNotificationsCount: Int?
         let newPersonalMessagesNotificationsCount: Int?
+        /// Unread counts grouped by notification_type (e.g. "6" = private message)
+        let groupedUnreadNotifications: [String: Int]?
     }
 }
 
@@ -44,6 +46,7 @@ extension MessageBusMessage.MessageData: Decodable {
         unreadHighPriorityNotifications = try container.decodeIfPresent(Int.self, forKey: .unreadHighPriorityNotifications)
         allUnreadNotificationsCount = try container.decodeIfPresent(Int.self, forKey: .allUnreadNotificationsCount)
         newPersonalMessagesNotificationsCount = try container.decodeIfPresent(Int.self, forKey: .newPersonalMessagesNotificationsCount)
+        groupedUnreadNotifications = try container.decodeIfPresent([String: Int].self, forKey: .groupedUnreadNotifications)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -51,5 +54,6 @@ extension MessageBusMessage.MessageData: Decodable {
         case unreadHighPriorityNotifications = "unread_high_priority_notifications"
         case allUnreadNotificationsCount = "all_unread_notifications_count"
         case newPersonalMessagesNotificationsCount = "new_personal_messages_notifications_count"
+        case groupedUnreadNotifications = "grouped_unread_notifications"
     }
 }

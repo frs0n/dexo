@@ -23,6 +23,7 @@ struct DiscourseNotification: Decodable, Identifiable {
     let notificationType: Int
     let read: Bool
     let createdAt: String
+    let postNumber: Int?
     let topicId: Int?
     let slug: String?
     let data: NotificationData
@@ -31,11 +32,12 @@ struct DiscourseNotification: Decodable, Identifiable {
         case id, read, slug, data
         case notificationType = "notification_type"
         case createdAt = "created_at"
+        case postNumber = "post_number"
         case topicId = "topic_id"
     }
 
     func markedAsRead() -> DiscourseNotification {
-        DiscourseNotification(id: id, notificationType: notificationType, read: true, createdAt: createdAt, topicId: topicId, slug: slug, data: data)
+        DiscourseNotification(id: id, notificationType: notificationType, read: true, createdAt: createdAt, postNumber: postNumber, topicId: topicId, slug: slug, data: data)
     }
 
     struct NotificationData: Decodable {

@@ -68,7 +68,7 @@ final class OneboxCardView: UIView {
         let faviconSize: CGFloat = 16
 
         if let faviconURL, let url = URL(string: faviconURL) {
-            faviconView.sd_setImage(with: url)
+            faviconView.sd_setImage(with: url, context: ImageCacheManager.shared.contentContext)
             headerStack.addArrangedSubview(faviconView)
             NSLayoutConstraint.activate([
                 faviconView.widthAnchor.constraint(equalToConstant: faviconSize),
@@ -178,7 +178,7 @@ final class OneboxCardView: UIView {
             ])
 
             bodyStack.addArrangedSubview(imageWrapper)
-            imageView.sd_setImage(with: url) { [weak self] _, _, _, _ in
+            imageView.sd_setImage(with: url, placeholderImage: nil, options: [], context: ImageCacheManager.shared.contentContext, progress: nil) { [weak self] _, _, _, _ in
                 self?.imageView.backgroundColor = .clear
             }
         }

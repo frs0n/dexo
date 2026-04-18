@@ -514,6 +514,21 @@ extension HomeViewController: UITableViewDelegate {
         navigationController?.pushViewController(detailVC, animated: true)
     }
 
+    func tableView(_ tableView: UITableView, contextMenuConfigurationForRowAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
+        guard let topicId = dataSource.itemIdentifier(for: indexPath) else { return nil }
+        return UIContextMenuConfiguration(identifier: topicId as NSCopying, previewProvider: { [weak self] in
+            guard let self else { return nil }
+            return TopicDetailViewController(api: self.api, topicId: topicId)
+        })
+    }
+
+    func tableView(_ tableView: UITableView, willPerformPreviewActionForMenuWith configuration: UIContextMenuConfiguration, animator: any UIContextMenuInteractionCommitAnimating) {
+        guard let detailVC = animator.previewViewController as? TopicDetailViewController else { return }
+        animator.addCompletion { [weak self] in
+            self?.navigationController?.pushViewController(detailVC, animated: true)
+        }
+    }
+
     func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath) {
         let totalRows = tableView.numberOfRows(inSection: 0)
         if indexPath.row >= totalRows - 1 {

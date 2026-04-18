@@ -652,7 +652,20 @@ final class TopicComposerViewController: ObservableViewController {
             textViewDidChange(bodyTextView)
             return
         }
-        bodyTextView.replace(range, withText: text)
+        var padded = text
+        if let before = bodyTextView.position(from: range.start, offset: -1),
+           let beforeRange = bodyTextView.textRange(from: before, to: range.start),
+           let prev = bodyTextView.text(in: beforeRange),
+           let ch = prev.last, !ch.isWhitespace && !ch.isNewline {
+            padded = " " + padded
+        }
+        if let after = bodyTextView.position(from: range.end, offset: 1),
+           let afterRange = bodyTextView.textRange(from: range.end, to: after),
+           let next = bodyTextView.text(in: afterRange),
+           let ch = next.first, !ch.isWhitespace && !ch.isNewline {
+            padded = padded + " "
+        }
+        bodyTextView.replace(range, withText: padded)
         textViewDidChange(bodyTextView)
     }
 
@@ -678,12 +691,8 @@ final class TopicComposerViewController: ObservableViewController {
         hasLoadedCustomEmojis = true
         emojiPickerInputView.showLoading()
         Task {
-            do {
-                let emojis = try await api.fetchCustomEmojis()
-                emojiPickerInputView.setCustomEmojis(emojis)
-            } catch {
-                // Silent — Unicode emojis still work
-            }
+            let emojis = await api.fetchCustomEmojis()
+            emojiPickerInputView.setCustomEmojis(emojis)
         }
     }
 
@@ -843,8 +852,8 @@ extension TopicComposerViewController: PHPickerViewControllerDelegate {
         picker.dismiss(animated: true)
         guard let provider = results.first?.itemProvider, provider.canLoadObject(ofClass: UIImage.self) else { return }
         provider.loadObject(ofClass: UIImage.self) { [weak self] object, _ in
-            guard let image = object as? UIImage else { return }
-            Task { @MainActor in
+            guard let self, let image = object as? UIImage else { return }
+            Task { @MainActor [weak self] in
                 self?.uploadImage(image)
             }
         }

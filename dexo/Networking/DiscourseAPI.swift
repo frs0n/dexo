@@ -177,9 +177,13 @@ final class DiscourseAPI {
         let _: [String: String] = try await request(route: .unfollowUser(username: username))
     }
 
-    func fetchCustomEmojis() async throws -> [DiscourseCustomEmoji] {
-        let siteInfo: DiscourseSiteInfo = try await request(route: .siteInfo)
-        return siteInfo.customEmoji ?? []
+    func fetchCustomEmojis() async -> [DiscourseCustomEmoji] {
+        // Ensure emoji map is loaded from /emojis.json
+        if !emojiReady {
+            await loadOrFetchEmojiMap()
+        }
+        return EmojiStore.lookupMap.map { DiscourseCustomEmoji(name: $0.key, url: $0.value) }
+            .sorted { $0.name < $1.name }
     }
 
     func search(term: String, page: Int = 0) async throws -> DiscourseSearchResult {
@@ -536,7 +540,7 @@ struct DiscourseAPIError: LocalizedError {
 
 private final class DiscourseAuthInterceptor: RequestInterceptor {
     private let baseURL: String
-    private var csrfToken: String?
+    nonisolated(unsafe) private var csrfToken: String?
     private var isFetchingCSRF = false
     private var csrfWaiters: [(String?) -> Void] = []
     private let csrfLock = NSLock()
@@ -580,7 +584,7 @@ private final class DiscourseAuthInterceptor: RequestInterceptor {
                     if request.value(forHTTPHeaderField: "Content-Type") == nil {
                         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                     }
-                    getOrFetchCSRFToken(session: session) { [weak self] token in
+                    getOrFetchCSRFToken(session: session) { token in
                         if let token {
                             request.setValue(token, forHTTPHeaderField: "X-CSRF-Token")
                         }

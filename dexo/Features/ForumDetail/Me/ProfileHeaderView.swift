@@ -199,7 +199,7 @@ final class ProfileHeaderView: UIView {
             if let template = avatarTemplate {
                 let sized = template.replacingOccurrences(of: "{size}", with: "240")
                 let urlString = sized.hasPrefix("http") ? sized : assetBaseURL + sized
-                avatarImageView.sd_setImage(with: URL(string: urlString))
+                avatarImageView.sd_setImage(with: URL(string: urlString), context: ImageCacheManager.shared.avatarContext)
             }
 
             if let title = userProfile?.title, !title.isEmpty {

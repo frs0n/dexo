@@ -40,7 +40,7 @@ enum DiscourseQuoteRenderer: BlockRenderer {
         ])
 
         if let avatarURL, let url = URL(string: avatarURL) {
-            avatarImageView.sd_setImage(with: url)
+            avatarImageView.sd_setImage(with: url, context: ImageCacheManager.shared.avatarContext)
         }
 
         if let topicTitle, !topicTitle.isEmpty {

@@ -76,8 +76,8 @@ enum NativeContentRenderer {
         delegate: PostCellDelegate?,
         pollProvider: ((String) -> (poll: DiscourseTopicDetail.Poll, votedOptionIds: Set<String>, post: DiscourseTopicDetail.Post)?)? = nil
     ) -> [UIView] {
-        let blocks = annotatedBlocks.map { annotated -> ContentBlock? in
-            if case .poll(let name) = annotated.block, pollProvider != nil {
+        _ = annotatedBlocks.map { annotated -> ContentBlock? in
+            if case .poll(_) = annotated.block, pollProvider != nil {
                 return annotated.block // handled separately below
             }
             return annotated.block

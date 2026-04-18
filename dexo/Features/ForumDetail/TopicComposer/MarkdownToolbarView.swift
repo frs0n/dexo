@@ -42,8 +42,9 @@ final class MarkdownToolbarView: UIView {
     }
 
     private func setup() {
-        backgroundColor = .secondarySystemBackground
+        applyTheme()
         autoresizingMask = .flexibleWidth
+        NotificationCenter.default.addObserver(self, selector: #selector(applyTheme), name: ThemeManager.themeDidChangeNotification, object: nil)
 
         let separator = UIView()
         separator.backgroundColor = .separator
@@ -106,6 +107,10 @@ final class MarkdownToolbarView: UIView {
     @objc private func buttonTapped(_ sender: UIButton) {
         guard sender.tag < actions.count else { return }
         onAction?(actions[sender.tag])
+    }
+
+    @objc private func applyTheme() {
+        backgroundColor = ThemeManager.shared.cardBackgroundColor
     }
 
     func updateEmojiButtonIcon(isEmojiVisible: Bool) {

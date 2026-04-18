@@ -142,7 +142,7 @@ final class TopicCell: UITableViewCell {
 
         // Avatar
         if let url = avatarURL {
-            avatarImageView.sd_setImage(with: url)
+            avatarImageView.sd_setImage(with: url, context: ImageCacheManager.shared.avatarContext)
         } else {
             avatarImageView.image = nil
         }
@@ -225,7 +225,7 @@ final class TopicCell: UITableViewCell {
     private func loadEmojiImages(in attributedString: NSMutableAttributedString) {
         attributedString.enumerateAttribute(.attachment, in: NSRange(location: 0, length: attributedString.length)) { value, _, _ in
             guard let attachment = value as? EmojiTextAttachment, let url = attachment.emojiURL else { return }
-            SDWebImageManager.shared.loadImage(with: url, progress: nil) { [weak self] image, _, _, _, _, _ in
+            SDWebImageManager.shared.loadImage(with: url, options: [], context: ImageCacheManager.shared.emojiContext, progress: nil) { [weak self] image, _, _, _, _, _ in
                 guard let image, let self else { return }
                 attachment.image = image
                 // Redraw the label only — avoid full cell layout recalculation

@@ -13,6 +13,8 @@ final class TappableImageContainer: UIView {
     /// (GIF); for static JPEG/PNG/WebP we use plain `UIImageView`, which is several
     /// times cheaper to instantiate (no animation state, no frame timer, no
     /// `SDAnimatedImageProvider` plumbing).
+    /// Exposed for zoom transition animations.
+    var displayedImageView: UIImageView { imageView }
     private let imageView: UIImageView
 
     private var imageHeightConstraint: NSLayoutConstraint!
@@ -81,7 +83,7 @@ final class TappableImageContainer: UIView {
 
         let hasOriginalSize = width != nil && height != nil
 
-        imageView.sd_setImage(with: url) { [weak self] image, _, _, _ in
+        imageView.sd_setImage(with: url, placeholderImage: nil, options: [], context: ImageCacheManager.shared.contentContext, progress: nil) { [weak self] image, _, _, _ in
             guard let self, let image else { return }
             if !hasOriginalSize {
                 let ratio = containerWidth / image.size.width
@@ -100,8 +102,12 @@ final class TappableImageContainer: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    /// Last tapped container, used by the zoom transition to find the source frame.
+    static weak var lastTapped: TappableImageContainer?
+
     @objc private func imageTapped() {
         guard let imageURL else { return }
+        Self.lastTapped = self
         let postId = findPostId()
         delegate?.postCell(didTapImageURL: imageURL, inPostId: postId)
     }

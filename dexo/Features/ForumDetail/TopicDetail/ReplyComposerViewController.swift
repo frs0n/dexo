@@ -1,3 +1,4 @@
+import PhotosUI
 import UIKit
 
 final class ReplyComposerViewController: BaseViewController {
@@ -30,57 +31,26 @@ final class ReplyComposerViewController: BaseViewController {
 
     private let charCountLabel: UILabel = {
         let label = UILabel()
-        label.font = FontManager.shared.monospacedDigitFont(size: 13)
-        label.textColor = .secondaryLabel
+        label.font = FontManager.shared.monospacedDigitFont(size: 12)
+        label.textColor = .tertiaryLabel
         label.text = "0"
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
 
-    private let emojiToggleButton: UIButton = {
-        let button = UIButton(type: .system)
-        let config = UIImage.SymbolConfiguration(pointSize: 20, weight: .regular)
-        button.setImage(UIImage(systemName: "face.smiling", withConfiguration: config), for: .normal)
-        button.tintColor = .label
-        return button
-    }()
-
-    private lazy var inputToolbar: UIView = {
-        let bar = UIView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: 44))
-        bar.backgroundColor = .secondarySystemBackground
-
-        let separator = UIView()
-        separator.backgroundColor = .separator
-        separator.translatesAutoresizingMaskIntoConstraints = false
-        bar.addSubview(separator)
-
-        emojiToggleButton.translatesAutoresizingMaskIntoConstraints = false
-        bar.addSubview(emojiToggleButton)
-        bar.addSubview(charCountLabel)
-
-        NSLayoutConstraint.activate([
-            separator.topAnchor.constraint(equalTo: bar.topAnchor),
-            separator.leadingAnchor.constraint(equalTo: bar.leadingAnchor),
-            separator.trailingAnchor.constraint(equalTo: bar.trailingAnchor),
-            separator.heightAnchor.constraint(equalToConstant: 0.5),
-
-            emojiToggleButton.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: 12),
-            emojiToggleButton.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
-            emojiToggleButton.widthAnchor.constraint(equalToConstant: 36),
-            emojiToggleButton.heightAnchor.constraint(equalToConstant: 36),
-
-            charCountLabel.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -16),
-            charCountLabel.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
-        ])
-
-        return bar
+    private lazy var markdownToolbar: MarkdownToolbarView = {
+        let toolbar = MarkdownToolbarView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: 44))
+        toolbar.onAction = { [weak self] action in
+            self?.handleToolbarAction(action)
+        }
+        return toolbar
     }()
 
     private lazy var emojiPickerInputView: EmojiPickerView = {
         let picker = EmojiPickerView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: 260))
         picker.autoresizingMask = .flexibleWidth
         picker.onEmojiSelected = { [weak self] emoji in
-            self?.insertEmoji(emoji)
+            self?.insertText(emoji)
         }
         return picker
     }()
@@ -103,13 +73,11 @@ final class ReplyComposerViewController: BaseViewController {
         super.init(nibName: nil, bundle: nil)
     }
 
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-
 
         if let username = replyToPost?.username {
             title = String(localized: "reply.title.to \(username)")
@@ -123,6 +91,7 @@ final class ReplyComposerViewController: BaseViewController {
 
         view.addSubview(textView)
         view.addSubview(placeholderLabel)
+        view.addSubview(charCountLabel)
 
         NSLayoutConstraint.activate([
             textView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
@@ -132,12 +101,13 @@ final class ReplyComposerViewController: BaseViewController {
 
             placeholderLabel.topAnchor.constraint(equalTo: textView.topAnchor, constant: 12),
             placeholderLabel.leadingAnchor.constraint(equalTo: textView.leadingAnchor, constant: 13),
+
+            charCountLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            charCountLabel.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -8),
         ])
 
-        textView.inputAccessoryView = inputToolbar
+        textView.inputAccessoryView = markdownToolbar
         textView.delegate = self
-
-        emojiToggleButton.addTarget(self, action: #selector(toggleEmojiPicker), for: .touchUpInside)
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -145,21 +115,123 @@ final class ReplyComposerViewController: BaseViewController {
         textView.becomeFirstResponder()
     }
 
-    // MARK: - Emoji Toggle
+    // MARK: - Toolbar Actions
 
-    @objc private func toggleEmojiPicker() {
+    private func handleToolbarAction(_ action: MarkdownAction) {
+        switch action {
+        case .bold:
+            wrapSelection(prefix: "**", suffix: "**")
+        case .italic:
+            wrapSelection(prefix: "_", suffix: "_")
+        case .heading:
+            prependToCurrentLine("## ")
+        case .link:
+            insertLinkTemplate()
+        case .bulletList:
+            prependToCurrentLine("- ")
+        case .quote:
+            prependToCurrentLine("> ")
+        case .code:
+            insertCode()
+        case .pickImage:
+            presentImagePicker()
+        case .toggleEmoji:
+            toggleEmojiPicker()
+        }
+    }
+
+    // MARK: - Markdown Helpers
+
+    private func wrapSelection(prefix: String, suffix: String) {
+        guard let range = textView.selectedTextRange else { return }
+        let selected = textView.text(in: range) ?? ""
+        let replacement = prefix + selected + suffix
+        textView.replace(range, withText: replacement)
+        if selected.isEmpty {
+            if let newPos = textView.position(from: range.start, offset: prefix.count) {
+                textView.selectedTextRange = textView.textRange(from: newPos, to: newPos)
+            }
+        }
+        textViewDidChange(textView)
+    }
+
+    private func prependToCurrentLine(_ prefix: String) {
+        let text = textView.text ?? ""
+        let nsRange = textView.selectedRange
+        let nsText = text as NSString
+        let lineRange = nsText.lineRange(for: NSRange(location: nsRange.location, length: 0))
+        let mutable = NSMutableString(string: text)
+        mutable.insert(prefix, at: lineRange.location)
+        textView.text = mutable as String
+        textView.selectedRange = NSRange(location: nsRange.location + prefix.count, length: 0)
+        textViewDidChange(textView)
+    }
+
+    private func insertLinkTemplate() {
+        guard let range = textView.selectedTextRange else { return }
+        let selected = textView.text(in: range) ?? ""
+        if selected.isEmpty {
+            textView.replace(range, withText: "[](url)")
+            if let newPos = textView.position(from: range.start, offset: 1) {
+                textView.selectedTextRange = textView.textRange(from: newPos, to: newPos)
+            }
+        } else {
+            let replacement = "[\(selected)](url)"
+            textView.replace(range, withText: replacement)
+            if let urlStart = textView.position(from: range.start, offset: selected.count + 3),
+               let urlEnd = textView.position(from: urlStart, offset: 3) {
+                textView.selectedTextRange = textView.textRange(from: urlStart, to: urlEnd)
+            }
+        }
+        textViewDidChange(textView)
+    }
+
+    private func insertCode() {
+        guard let range = textView.selectedTextRange else { return }
+        let selected = textView.text(in: range) ?? ""
+        if selected.contains("\n") {
+            textView.replace(range, withText: "```\n\(selected)\n```")
+        } else {
+            wrapSelection(prefix: "`", suffix: "`")
+        }
+    }
+
+    private func insertText(_ text: String) {
+        guard let range = textView.selectedTextRange else {
+            textView.text.append(text)
+            textViewDidChange(textView)
+            return
+        }
+        var padded = text
+        // Add space before if previous character is not whitespace/newline
+        if let before = textView.position(from: range.start, offset: -1),
+           let beforeRange = textView.textRange(from: before, to: range.start),
+           let prev = textView.text(in: beforeRange),
+           let ch = prev.last, !ch.isWhitespace && !ch.isNewline {
+            padded = " " + padded
+        }
+        // Add space after if next character is not whitespace/newline
+        if let after = textView.position(from: range.end, offset: 1),
+           let afterRange = textView.textRange(from: range.end, to: after),
+           let next = textView.text(in: afterRange),
+           let ch = next.first, !ch.isWhitespace && !ch.isNewline {
+            padded = padded + " "
+        }
+        textView.replace(range, withText: padded)
+        textViewDidChange(textView)
+    }
+
+    // MARK: - Emoji Picker
+
+    private func toggleEmojiPicker() {
         isEmojiPickerVisible.toggle()
-        let config = UIImage.SymbolConfiguration(pointSize: 20, weight: .regular)
-
         if isEmojiPickerVisible {
             textView.inputView = emojiPickerInputView
-            emojiToggleButton.setImage(UIImage(systemName: "keyboard", withConfiguration: config), for: .normal)
             loadCustomEmojis()
         } else {
             textView.inputView = nil
-            emojiToggleButton.setImage(UIImage(systemName: "face.smiling", withConfiguration: config), for: .normal)
         }
-
+        markdownToolbar.updateEmojiButtonIcon(isEmojiVisible: isEmojiPickerVisible)
         textView.reloadInputViews()
         if !textView.isFirstResponder {
             textView.becomeFirstResponder()
@@ -171,31 +243,69 @@ final class ReplyComposerViewController: BaseViewController {
         hasLoadedCustomEmojis = true
         emojiPickerInputView.showLoading()
         Task {
+            let emojis = await api.fetchCustomEmojis()
+            emojiPickerInputView.setCustomEmojis(emojis)
+        }
+    }
+
+    // MARK: - Image Upload
+
+    private func presentImagePicker() {
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        config.selectionLimit = 1
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = self
+        present(picker, animated: true)
+    }
+
+    private func uploadImage(_ image: UIImage) {
+        guard let data = image.jpegData(compressionQuality: 0.8) else { return }
+        let filename = "image_\(Int(Date().timeIntervalSince1970)).jpg"
+
+        let placeholder = "[" + String(localized: "compose.uploading") + "]"
+        let insertRange = textView.selectedTextRange ?? textView.textRange(
+            from: textView.endOfDocument, to: textView.endOfDocument
+        )!
+        textView.replace(insertRange, withText: placeholder)
+        textViewDidChange(textView)
+
+        textView.isEditable = false
+        textView.textColor = .placeholderText
+
+        Task {
             do {
-                let emojis = try await api.fetchCustomEmojis()
-                emojiPickerInputView.setCustomEmojis(emojis)
+                let response = try await api.uploadImage(data: data, filename: filename)
+                let markdown = "![\(response.originalFilename)](\(response.shortUrl))"
+                if let range = (textView.text as NSString?)?.range(of: placeholder),
+                   range.location != NSNotFound {
+                    let mutable = NSMutableString(string: textView.text)
+                    mutable.replaceCharacters(in: range, with: markdown)
+                    textView.text = mutable as String
+                }
+                textViewDidChange(textView)
             } catch {
-                // Silently handle — user can still use Unicode emojis
+                if let range = (textView.text as NSString?)?.range(of: placeholder),
+                   range.location != NSNotFound {
+                    let mutable = NSMutableString(string: textView.text)
+                    mutable.deleteCharacters(in: range)
+                    textView.text = mutable as String
+                }
+                textViewDidChange(textView)
+                let alert = UIAlertController(
+                    title: String(localized: "compose.upload.failed"),
+                    message: error.localizedDescription,
+                    preferredStyle: .alert
+                )
+                alert.addAction(UIAlertAction(title: String(localized: "action.ok"), style: .default))
+                present(alert, animated: true)
             }
+            textView.isEditable = true
+            textView.textColor = .label
         }
     }
 
-    // MARK: - Text Editing
-
-    private func insertEmoji(_ emoji: String) {
-        let range = textView.selectedRange
-        if let textRange = Range(range, in: textView.text) {
-            textView.text = textView.text.replacingCharacters(in: textRange, with: emoji)
-            let newPos = textView.text.index(textRange.lowerBound, offsetBy: emoji.count)
-            let nsRange = NSRange(newPos..<newPos, in: textView.text)
-            textView.selectedRange = nsRange
-        } else {
-            textView.text.append(emoji)
-        }
-        updatePlaceholder()
-        updateSendButton()
-        updateCharCount()
-    }
+    // MARK: - UI State
 
     private func updatePlaceholder() {
         placeholderLabel.isHidden = !textView.text.isEmpty
@@ -256,5 +366,21 @@ extension ReplyComposerViewController: UITextViewDelegate {
         updatePlaceholder()
         updateSendButton()
         updateCharCount()
+    }
+}
+
+// MARK: - PHPickerViewControllerDelegate
+
+extension ReplyComposerViewController: PHPickerViewControllerDelegate {
+    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+        picker.dismiss(animated: true)
+        guard let provider = results.first?.itemProvider,
+              provider.canLoadObject(ofClass: UIImage.self) else { return }
+        provider.loadObject(ofClass: UIImage.self) { [weak self] object, _ in
+            guard let self, let image = object as? UIImage else { return }
+            Task { @MainActor in
+                self.uploadImage(image)
+            }
+        }
     }
 }

@@ -117,7 +117,7 @@ final class MessageCell: UITableViewCell {
                let template = user.avatarTemplate {
                 let sized = template.replacingOccurrences(of: "{size}", with: "96")
                 let urlString = sized.hasPrefix("http") ? sized : assetBaseURL + sized
-                avatarImageView.sd_setImage(with: URL(string: urlString))
+                avatarImageView.sd_setImage(with: URL(string: urlString), context: ImageCacheManager.shared.avatarContext)
             }
         } else {
             participantsLabel.text = nil

@@ -49,7 +49,7 @@ jobs:
       - name: Read version
         id: version
         run: |
-          VERSION=$(grep -o "'MARKETING_VERSION': .string(\"[^\"]*\")" Project.swift | grep -o '"[^"]*"' | tr -d '"')
+          VERSION=$(grep -o '"MARKETING_VERSION": "[^"]*"' Project.swift | grep -o '"[^"]*"$' | tr -d '"')
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Create tag and Release

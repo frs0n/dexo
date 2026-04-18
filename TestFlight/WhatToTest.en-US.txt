@@ -1,5 +1,10 @@
 What to Test
 
-- Minimum supported version lowered to iOS 15 (older versions may not load the login page properly)
-- Added font size adjustment
-- Tap the Home tab to scroll to the top; tap again to refresh the list
+- Separated image cache into avatar/emoji/content with independent clearing
+- Long press on post to view raw markdown source
+- Reply composer now has full markdown toolbar and image upload
+- Long press topic cell for preview (Context Menu)
+- Image viewer zoom transition animation
+- Boost danmaku plays after sending a boost
+- Auto-scroll to new post after replying
+- Source code link in Settings

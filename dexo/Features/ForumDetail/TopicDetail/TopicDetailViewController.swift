@@ -72,6 +72,7 @@ final class TopicDetailViewController: ObservableViewController {
     private var earlierLoadAnchor: (postId: Int, cellTopOffset: CGFloat)?
     /// Cache actual cell heights to avoid jumps from inaccurate estimates
     private var cellHeightCache: [TopicDetailItem: CGFloat] = [:]
+    private let imageZoomTransition = ImageZoomTransitionDelegate()
     private lazy var boostDanmaku = BoostDanmakuOverlay(hostView: view)
 
     private lazy var tableView: UITableView = {
@@ -465,7 +466,8 @@ final class TopicDetailViewController: ObservableViewController {
             if let targetFloor = viewModel.jumpTargetFloor {
                 viewModel.jumpTargetFloor = nil
                 pendingScrollToFloor = targetFloor
-                tableView.setNeedsLayout()
+                view.setNeedsLayout()
+                view.layoutIfNeeded()
             }
         }
     }
@@ -618,7 +620,7 @@ final class TopicDetailViewController: ObservableViewController {
     private func loadTitleEmojiImages(in attributedString: NSMutableAttributedString, label: UILabel) {
         attributedString.enumerateAttribute(.attachment, in: NSRange(location: 0, length: attributedString.length)) { value, _, _ in
             guard let attachment = value as? EmojiTextAttachment, let url = attachment.emojiURL else { return }
-            SDWebImageManager.shared.loadImage(with: url, progress: nil) { [weak self] image, _, _, _, _, _ in
+            SDWebImageManager.shared.loadImage(with: url, options: [], context: ImageCacheManager.shared.emojiContext, progress: nil) { [weak self] image, _, _, _, _, _ in
                 guard let image, let self else { return }
                 attachment.image = image
                 label.setNeedsDisplay()
@@ -951,7 +953,16 @@ extension TopicDetailViewController: PostCellDelegate {
 //        LightboxConfig.preload = 2
         let controller = LightboxController(images: images, startIndex: startIndex)
         controller.dynamicBackground = true
-        controller.modalPresentationStyle = .fullScreen
+
+        if let source = TappableImageContainer.lastTapped {
+            imageZoomTransition.sourceImageView = source.displayedImageView
+            imageZoomTransition.sourceContainer = source
+            controller.modalPresentationStyle = .custom
+            controller.transitioningDelegate = imageZoomTransition
+        } else {
+            controller.modalPresentationStyle = .fullScreen
+        }
+
         present(controller, animated: true)
     }
 
@@ -1157,6 +1168,14 @@ extension TopicDetailViewController: PostCellDelegate {
                 do {
                     let boost = try await self.api.createBoost(postId: post.id, raw: raw)
                     self.viewModel.appendBoost(boost, toPostId: post.id)
+                    if AppSettings.shared.boostDisplayMode == .danmaku,
+                       let cell = self.cellForPost(id: post.id) {
+                        let cellRect = self.tableView.convert(cell.frame, to: self.view)
+                        let top = max(self.view.safeAreaInsets.top, cellRect.origin.y) + 8
+                        let bottom = min(cellRect.maxY, self.view.bounds.height - self.view.safeAreaInsets.bottom)
+                        self.boostDanmaku.shoot(boosts: [boost], assetBaseURL: self.assetBaseURL,
+                                               top: top, bottom: bottom)
+                    }
                     self.refreshBoostUI()
                 } catch {
                     let failureAlert = UIAlertController(
@@ -1258,6 +1277,31 @@ extension TopicDetailViewController: PostCellDelegate {
         })
         alert.addAction(UIAlertAction(title: String(localized: "action.cancel"), style: .cancel))
         present(alert, animated: true)
+    }
+
+    func postCell(didLongPressPost post: DiscourseTopicDetail.Post) {
+        Task {
+            do {
+                let detail = try await api.fetchPost(id: post.id)
+                guard let raw = detail.raw, !raw.isEmpty else { return }
+                let vc = RawContentViewController(raw: raw, username: post.username, floorNumber: post.postNumber)
+                let nav = UINavigationController(rootViewController: vc)
+                if let sheet = nav.sheetPresentationController {
+                    sheet.detents = [.medium(), .large()]
+                    sheet.prefersGrabberVisible = true
+                }
+                present(nav, animated: true)
+            } catch {
+                let alert = UIAlertController(title: nil, message: error.localizedDescription, preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: String(localized: "action.ok"), style: .default))
+                present(alert, animated: true)
+            }
+        }
+    }
+
+    private func cellForPost(id postId: Int) -> UITableViewCell? {
+        guard let indexPath = dataSource.indexPath(for: .post(postId)) else { return nil }
+        return tableView.cellForRow(at: indexPath)
     }
 
     private func reconfigurePost(_ postId: Int) {

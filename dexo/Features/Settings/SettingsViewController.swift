@@ -39,6 +39,7 @@ final class SettingsViewController: ObservableViewController {
         case general
         case appearance
         case storage
+        case about
         #if DEBUG
         case debug
         #endif
@@ -48,9 +49,9 @@ final class SettingsViewController: ObservableViewController {
     /// Sections actually shown in the table, in order.
     private var visibleSections: [Section] {
         #if DEBUG
-        return [.general, .appearance, .storage, .debug]
+        return [.general, .appearance, .storage, .about, .debug]
         #else
-        return [.general, .appearance, .storage]
+        return [.general, .appearance, .storage, .about]
         #endif
     }
 
@@ -85,6 +86,7 @@ extension SettingsViewController: UITableViewDataSource {
         case .general: return 2
         case .appearance: return 3
         case .storage: return 1
+        case .about: return 1
         case .network: return networkRows().count
         #if DEBUG
         case .debug: return 1
@@ -97,6 +99,7 @@ extension SettingsViewController: UITableViewDataSource {
         case .general: return String(localized: "settings.section.general")
         case .appearance: return String(localized: "settings.section.appearance")
         case .storage: return String(localized: "settings.section.storage")
+        case .about: return String(localized: "settings.section.about")
         case .network: return String(localized: "settings.section.network")
         #if DEBUG
         case .debug: return "Debug"
@@ -122,6 +125,8 @@ extension SettingsViewController: UITableViewDataSource {
             }
         case .storage:
             return makeStorageCell(tableView, indexPath: indexPath)
+        case .about:
+            return makeSourceCodeCell(tableView, indexPath: indexPath)
         case .network:
             let row = networkRows()[indexPath.row]
             switch row {
@@ -239,6 +244,15 @@ extension SettingsViewController: UITableViewDataSource {
         return cell
     }
 
+    private func makeSourceCodeCell(_ tableView: UITableView, indexPath: IndexPath) -> UITableViewCell {
+        let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
+        applyFonts(to: cell)
+        cell.textLabel?.text = String(localized: "settings.source_code")
+        cell.detailTextLabel?.text = "GitHub"
+        cell.accessoryType = .disclosureIndicator
+        return cell
+    }
+
     #if DEBUG
     private func makeRenderPreviewCell(_ tableView: UITableView, indexPath: IndexPath) -> UITableViewCell {
         let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
@@ -274,6 +288,10 @@ extension SettingsViewController: UITableViewDelegate {
         case .storage:
             let vc = CacheViewController()
             navigationController?.pushViewController(vc, animated: true)
+        case .about:
+            if let url = URL(string: "https://github.com/Eilgnaw/dexo") {
+                UIApplication.shared.open(url)
+            }
         case .network:
             let row = networkRows()[indexPath.row]
             switch row {

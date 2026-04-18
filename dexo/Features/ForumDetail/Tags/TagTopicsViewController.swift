@@ -35,7 +35,7 @@ private final class TagTopicsViewModel {
         currentPage = 0
         do {
             async let topicsResult = api.fetchTagTopics(name: tagName, page: 0)
-            async let categoriesResult = loadCategoriesIfNeeded()
+            async let categoriesResult: Void = loadCategoriesIfNeeded()
             let result = try await topicsResult
             _ = await categoriesResult
             topics = result.topicList.topics

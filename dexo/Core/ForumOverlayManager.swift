@@ -102,7 +102,7 @@ final class ForumOverlayManager {
     // MARK: - Restore
 
     func restore() {
-        guard let currentContainer,
+        guard let _ = currentContainer,
               let mainWindow,
               let overlayWindow,
               isMinimized else { return }
@@ -191,7 +191,7 @@ final class ForumOverlayManager {
         imageView.frame = CGRect(x: 12, y: 12, width: size - 24, height: size - 24)
 
         if let iconURLString = forum.iconURL, let iconURL = URL(string: iconURLString) {
-            imageView.sd_setImage(with: iconURL, placeholderImage: UIImage(systemName: "globe"))
+            imageView.sd_setImage(with: iconURL, placeholderImage: UIImage(systemName: "globe"), options: [], context: ImageCacheManager.shared.avatarContext)
         } else {
             imageView.image = UIImage(systemName: "globe")
             imageView.tintColor = .label

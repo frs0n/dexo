@@ -376,6 +376,9 @@ final class PostNativeCell: UITableViewCell {
         avatarImageView.isUserInteractionEnabled = true
         let avatarTap = UITapGestureRecognizer(target: self, action: #selector(avatarTapped))
         avatarImageView.addGestureRecognizer(avatarTap)
+
+        let cellLongPress = UILongPressGestureRecognizer(target: self, action: #selector(cellLongPressed(_:)))
+        contentView.addGestureRecognizer(cellLongPress)
     }
 
     /// The current content block views in the stack, for VC-level caching.
@@ -454,7 +457,7 @@ final class PostNativeCell: UITableViewCell {
                 if let bgColor = post.flairBgColor, !bgColor.isEmpty {
                     flairImageView.backgroundColor = UIColor(hex: bgColor)
                 }
-                flairImageView.sd_setImage(with: url)
+                flairImageView.sd_setImage(with: url, context: ImageCacheManager.shared.avatarContext)
                 flairImageView.isHidden = false
             }
         }
@@ -581,7 +584,7 @@ final class PostNativeCell: UITableViewCell {
             let sized = template.replacingOccurrences(of: "{size}", with: "96")
             let urlString = sized.hasPrefix("http") ? sized : baseURL + sized
             if let url = URL(string: urlString) {
-                avatarImageView.sd_setImage(with: url)
+                avatarImageView.sd_setImage(with: url, context: ImageCacheManager.shared.avatarContext)
             }
         }
     }
@@ -602,7 +605,7 @@ final class PostNativeCell: UITableViewCell {
             cancelUserReactionImageLoad()
             return
         }
-        userReactionImageView.sd_setImage(with: url)
+        userReactionImageView.sd_setImage(with: url, context: ImageCacheManager.shared.emojiContext)
     }
 
     private func cancelUserReactionImageLoad() {
@@ -622,7 +625,7 @@ final class PostNativeCell: UITableViewCell {
             if i < visible.count {
                 let reaction = visible[visible.index(visible.startIndex, offsetBy: i)]
                 if let url = URL(string: EmojiStore.lookup(for: reaction.id) ?? "") {
-                    iv.sd_setImage(with: url)
+                    iv.sd_setImage(with: url, context: ImageCacheManager.shared.emojiContext)
                 } else {
                     iv.sd_cancelCurrentImageLoad()
                     iv.image = nil
@@ -719,7 +722,7 @@ final class PostNativeCell: UITableViewCell {
         }
 
         for (url, entries) in byURL {
-            SDWebImageManager.shared.loadImage(with: url, progress: nil) { image, _, _, _, _, _ in
+            SDWebImageManager.shared.loadImage(with: url, options: [], context: ImageCacheManager.shared.emojiContext, progress: nil) { image, _, _, _, _, _ in
                 guard let image else { return }
                 for entry in entries {
                     entry.attachment.image = image
@@ -747,6 +750,11 @@ final class PostNativeCell: UITableViewCell {
     @objc private func avatarTapped() {
         guard let username = currentPost?.username else { return }
         delegate?.postCell(didTapAvatarForUsername: username)
+    }
+
+    @objc private func cellLongPressed(_ gesture: UILongPressGestureRecognizer) {
+        guard gesture.state == .began, let post = currentPost else { return }
+        delegate?.postCell(didLongPressPost: post)
     }
 
     private func updateMoreMenu() {
@@ -932,7 +940,7 @@ final class PostNativeCell: UITableViewCell {
             let iv = UIImageView()
             iv.contentMode = .scaleAspectFit
             iv.translatesAutoresizingMaskIntoConstraints = false
-            iv.sd_setImage(with: url)
+            iv.sd_setImage(with: url, context: ImageCacheManager.shared.emojiContext)
             iv.isUserInteractionEnabled = false
             button.addSubview(iv)
             NSLayoutConstraint.activate([

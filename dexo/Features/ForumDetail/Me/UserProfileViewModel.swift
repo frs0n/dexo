@@ -42,6 +42,6 @@ final class UserProfileViewModel {
     }
 
     func sendMessage(title: String, body: String) async throws {
-        try await api.createPrivateMessage(targetRecipients: username, title: title, raw: body)
+        _ = try await api.createPrivateMessage(targetRecipients: username, title: title, raw: body)
     }
 }

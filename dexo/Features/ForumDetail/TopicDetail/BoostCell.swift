@@ -285,7 +285,7 @@ private final class BoostChipView: UIView {
         if let sizedAvatar {
             let urlString = sizedAvatar.hasPrefix("http") ? sizedAvatar : assetBaseURL + sizedAvatar
             if let url = URL(string: urlString) {
-                avatarImageView.sd_setImage(with: url)
+                avatarImageView.sd_setImage(with: url, context: ImageCacheManager.shared.avatarContext)
             }
         }
 
@@ -401,7 +401,7 @@ private final class BoostChipView: UIView {
         }
 
         for entry in entries {
-            SDWebImageManager.shared.loadImage(with: entry.url, progress: nil) { [weak textView] image, _, _, _, _, _ in
+            SDWebImageManager.shared.loadImage(with: entry.url, options: [], context: ImageCacheManager.shared.emojiContext, progress: nil) { [weak textView] image, _, _, _, _, _ in
                 guard let textView, let image else { return }
                 entry.attachment.image = image
                 textView.textStorage.edited(

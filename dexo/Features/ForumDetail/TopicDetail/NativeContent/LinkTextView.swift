@@ -25,6 +25,17 @@ final class LinkTextView: UITextView {
         false
     }
 
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        // Disable all built-in long press gestures (loupe/selection) so they don't
+        // conflict with the cell's long press gesture. Link taps still work via tap.
+        gestureRecognizers?.forEach { gesture in
+            if gesture is UILongPressGestureRecognizer {
+                gesture.isEnabled = false
+            }
+        }
+    }
+
     override func selectionRects(for range: UITextRange) -> [UITextSelectionRect] {
         []
     }

@@ -80,8 +80,8 @@ final class EmojiPickerView: UIView {
 
     func setCustomEmojis(_ emojis: [DiscourseCustomEmoji]) {
         customEmojis = emojis
+        loadingIndicator.stopAnimating()
         if selectedTab == 1 {
-            loadingIndicator.stopAnimating()
             collectionView.reloadData()
         }
     }
@@ -92,6 +92,9 @@ final class EmojiPickerView: UIView {
 
     @objc private func segmentChanged() {
         selectedTab = segmentedControl.selectedSegmentIndex
+        if selectedTab == 1, !customEmojis.isEmpty {
+            loadingIndicator.stopAnimating()
+        }
         collectionView.reloadData()
     }
 }
@@ -188,7 +191,7 @@ private final class CustomEmojiCell: UICollectionViewCell {
     }
 
     func configure(emoji: DiscourseCustomEmoji) {
-        imageView.sd_setImage(with: URL(string: emoji.url))
+        imageView.sd_setImage(with: URL(string: emoji.url), context: ImageCacheManager.shared.emojiContext)
     }
 
     override func prepareForReuse() {

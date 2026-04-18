@@ -140,7 +140,7 @@ final class ForumContainerViewController: BaseViewController, AuthGating {
             if i < titles.count {
                 rootVC.title = titles[i]
             }
-            var rightItems = [
+            let rightItems = [
                 UIBarButtonItem(
                     image: UIImage(systemName: "smallcircle.filled.circle"),
                     style: .plain,

@@ -15,8 +15,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         SDImageCodersManager.shared.addCoder(SDImageSVGCoder.shared)
 
+        // One-time: clear legacy shared cache (all images now use per-type caches)
+        if !UserDefaults.standard.bool(forKey: "legacyCacheCleared") {
+            SDImageCache.shared.clearDisk {
+                UserDefaults.standard.set(true, forKey: "legacyCacheCleared")
+            }
+        }
+
         LightboxConfig.loadImage = { imageView, url, completion in
-            imageView.sd_setImage(with: url) { image, _, _, _ in
+            imageView.sd_setImage(with: url, placeholderImage: nil, options: [], context: ImageCacheManager.shared.contentContext, progress: nil) { image, _, _, _ in
                 completion?(image)
             }
         }

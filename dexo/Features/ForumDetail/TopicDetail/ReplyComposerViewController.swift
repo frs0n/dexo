@@ -6,7 +6,7 @@ final class ReplyComposerViewController: BaseViewController {
     private let topicId: Int
     private let replyToPost: DiscourseTopicDetail.Post?
     private let baseURL: String
-    var onPostCreated: ((_ postNumber: Int) -> Void)?
+    var onPostCreated: ((_ postId: Int, _ postNumber: Int) -> Void)?
 
     private var isEmojiPickerVisible = false
     private var hasLoadedCustomEmojis = false
@@ -339,9 +339,10 @@ final class ReplyComposerViewController: BaseViewController {
                     replyToPostNumber: replyToPost?.postNumber,
                     raw: raw
                 )
+                let newPostId = response.id
                 let newPostNumber = response.postNumber
                 dismiss(animated: true) { [weak self] in
-                    self?.onPostCreated?(newPostNumber)
+                    self?.onPostCreated?(newPostId, newPostNumber)
                 }
             } catch {
                 navigationItem.rightBarButtonItem = sendButton

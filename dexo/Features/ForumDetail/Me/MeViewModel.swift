@@ -21,7 +21,19 @@ final class MeViewModel {
         isLoading = true
         errorMessage = nil
         do {
-            let username = AuthManager.shared.username(for: api.baseURL) ?? ""
+            // Prefer the AuthManager cache (populated at login), but fall back
+            // to `/session/current.json` when it's empty — `fetchAndCacheUsername`
+            // can fail silently (both primary and fallback wrapped in `try?`),
+            // leaving the cache unset even though the API key was saved. Without
+            // this fallback the profile screen would stay empty after login.
+            let username: String
+            if let cached = AuthManager.shared.username(for: api.baseURL) {
+                username = cached
+            } else {
+                let current = try await api.fetchCurrentUser()
+                username = current.username
+                AuthManager.shared.setCachedUsername(username, for: api.baseURL)
+            }
             let profile = try await api.fetchUserProfile(username: username)
             let userSummary = try? await api.fetchUserSummary(username: username)
             currentUser = DiscourseCurrentUser(

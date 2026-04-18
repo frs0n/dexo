@@ -89,13 +89,25 @@ final class MeViewController: ObservableViewController {
     }
 
     override func updateUI() {
+        // Access every observed property up front so `withPerceptionTracking`
+        // registers them regardless of which branch runs below. Without this,
+        // branches that short-circuit (e.g., the logged-out path skips the
+        // `if isLoggedIn` block) leave `currentUser`/`userProfile`/`summary`
+        // untracked, so writes after login fire no `onChange` and the UI
+        // never refreshes.
+        let isLoading = viewModel.isLoading
+        let errorMessage = viewModel.errorMessage
+        let currentUser = viewModel.currentUser
+        let userProfile = viewModel.userProfile
+        let summary = viewModel.summary
+
         // Show skeleton on first load, hide once data arrives
-        if !hasLoaded, viewModel.isLoading {
+        if !hasLoaded, isLoading {
             skeletonView.isHidden = false
             tableView.isHidden = true
             return
         }
-        if !hasLoaded, !viewModel.isLoading {
+        if !hasLoaded, !isLoading {
             hasLoaded = true
             UIView.animate(withDuration: 0.25) {
                 self.skeletonView.alpha = 0
@@ -106,7 +118,7 @@ final class MeViewController: ObservableViewController {
             tableView.isHidden = false
         }
 
-        if let error = viewModel.errorMessage {
+        if let error = errorMessage {
             let alert = UIAlertController(title: nil, message: error, preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: String(localized: "action.cancel"), style: .cancel))
             present(alert, animated: true)
@@ -122,9 +134,9 @@ final class MeViewController: ObservableViewController {
 
         if isLoggedIn {
             profileHeader.configure(
-                user: viewModel.currentUser,
-                userProfile: viewModel.userProfile,
-                summary: viewModel.summary,
+                user: currentUser,
+                userProfile: userProfile,
+                summary: summary,
                 assetBaseURL: api.assetBaseURL
             )
         } else {

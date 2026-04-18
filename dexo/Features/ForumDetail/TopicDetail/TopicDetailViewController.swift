@@ -60,8 +60,11 @@ final class TopicDetailViewController: ObservableViewController {
     private let assetBaseURL: String
     private var hasTitleHeader = false
     private var isLoadingEarlierLocally = false
-    private var pendingScrollToFloor: Int?
-    private var pendingScrollIndexPath: IndexPath?
+    private var pendingScrollIndexPath: (indexPath: IndexPath, position: UITableView.ScrollPosition)?
+    /// Scroll position to use the next time `viewModel.jumpTargetFloor` is consumed.
+    /// `.top` for ordinary jumps, `.bottom` after a reply so the new post sits at
+    /// the reader's focus. One-shot: resets to `.top` after each use.
+    private var nextJumpPosition: UITableView.ScrollPosition = .top
     private var lastScrollOffset: CGFloat = 0
     /// VC-level cache of rendered content views keyed by post ID.
     /// Avoids re-creating the entire view tree when scrolling back to a post.
@@ -323,42 +326,50 @@ final class TopicDetailViewController: ObservableViewController {
             tableView.verticalScrollIndicatorInsets.bottom = bottomInset
         }
 
-        // Execute deferred jump scroll after layout is complete
-        if let floor = pendingScrollToFloor {
-            pendingScrollToFloor = nil
-            guard let postIndex = viewModel.visibleRowForFloor(floor) else { return }
-            // Calculate actual row: add one boosts row per prior post that has boosts
-            var targetRow = postIndex
-            for i in 0..<postIndex {
-                if !viewModel.visiblePosts[i].boosts.isEmpty {
-                    targetRow += 1
-                }
-            }
-            let rowCount = tableView.numberOfRows(inSection: 0)
-            guard rowCount > 0 else { return }
-            let safeRow = min(targetRow, rowCount - 1)
-            let indexPath = IndexPath(row: safeRow, section: 0)
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            tableView.scrollToRow(at: indexPath, at: .top, animated: false)
-            CATransaction.commit()
-            lastScrollOffset = tableView.contentOffset.y
-            // Schedule correction after cells render with actual heights
-            pendingScrollIndexPath = indexPath
-        }
-
-        if let indexPath = pendingScrollIndexPath {
-            // Wait until the target cell has been displayed (height cached)
-            if let item = dataSource.itemIdentifier(for: indexPath),
+        // Retry the scroll after further layout passes in case the target row's
+        // height changed after initial display (e.g. async image loads).
+        if let pending = pendingScrollIndexPath {
+            if let item = dataSource.itemIdentifier(for: pending.indexPath),
                cellHeightCache[item] != nil {
                 pendingScrollIndexPath = nil
                 CATransaction.begin()
                 CATransaction.setDisableActions(true)
-                tableView.scrollToRow(at: indexPath, at: .top, animated: false)
+                tableView.scrollToRow(at: pending.indexPath, at: pending.position, animated: false)
                 CATransaction.commit()
                 lastScrollOffset = tableView.contentOffset.y
             }
         }
+    }
+
+    /// Scrolls to the row corresponding to `floor` with a two-pass approach so
+    /// the offset is accurate even when cell heights start as estimates:
+    /// 1. First scroll uses estimates to get roughly in range.
+    /// 2. `layoutIfNeeded` forces cells near the target to render, caching their
+    ///    real heights via `willDisplay`.
+    /// 3. Second scroll re-runs with real heights and lands accurately.
+    private func performJumpScroll(toFloor floor: Int, position: UITableView.ScrollPosition) {
+        guard let postIndex = viewModel.visibleRowForFloor(floor) else { return }
+        var targetRow = postIndex
+        for i in 0..<postIndex where !viewModel.visiblePosts[i].boosts.isEmpty {
+            targetRow += 1
+        }
+        let rowCount = tableView.numberOfRows(inSection: 0)
+        guard rowCount > 0 else { return }
+        let safeRow = min(targetRow, rowCount - 1)
+        let indexPath = IndexPath(row: safeRow, section: 0)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        tableView.scrollToRow(at: indexPath, at: position, animated: false)
+        CATransaction.commit()
+        tableView.layoutIfNeeded()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        tableView.scrollToRow(at: indexPath, at: position, animated: false)
+        CATransaction.commit()
+        lastScrollOffset = tableView.contentOffset.y
+        // Keep a retry target in case the cell's height changes later (async
+        // image loads, delayed content sizing).
+        pendingScrollIndexPath = (indexPath, position)
     }
 
     override func updateUI() {
@@ -462,12 +473,15 @@ final class TopicDetailViewController: ObservableViewController {
                 }
             }
 
-            // After a jump, defer scroll to next layout pass so cells are sized
+            // Scroll to the jump target synchronously after the snapshot is
+            // applied. Going through `viewDidLayoutSubviews` added a hop that
+            // didn't always fire; performing the scroll here runs every time
+            // the target floor changes.
             if let targetFloor = viewModel.jumpTargetFloor {
                 viewModel.jumpTargetFloor = nil
-                pendingScrollToFloor = targetFloor
-                view.setNeedsLayout()
-                view.layoutIfNeeded()
+                let position = nextJumpPosition
+                nextJumpPosition = .top
+                performJumpScroll(toFloor: targetFloor, position: position)
             }
         }
     }
@@ -806,7 +820,7 @@ extension TopicDetailViewController: TopicDetailBottomBarDelegate {
                 return
             }
 
-            // Show overlay while fetching; scroll is handled in viewDidLayoutSubviews via pendingScrollToFloor
+            // Show overlay while fetching; scroll is handled in `updateUI` via `jumpTargetFloor` consumption.
             self.showJumpOverlay()
             self.hasTitleHeader = false
             self.suppressLoadEarlier = true
@@ -950,8 +964,7 @@ extension TopicDetailViewController: PostCellDelegate {
 
         let images = imageURLs.compactMap { URL(string: $0) }.map { LightboxImage(imageURL: $0) }
         guard !images.isEmpty else { return }
-//        LightboxConfig.preload = 2
-        let controller = LightboxController(images: images, startIndex: startIndex)
+        let controller = ImageBrowserController(images: images, startIndex: startIndex)
         controller.dynamicBackground = true
 
         if let source = TappableImageContainer.lastTapped {
@@ -1128,11 +1141,17 @@ extension TopicDetailViewController: PostCellDelegate {
             replyToPost: post,
             baseURL: baseURL
         )
-        composer.onPostCreated = { [weak self] newPostNumber in
+        composer.onPostCreated = { [weak self] _, newPostNumber in
             guard let self else { return }
+            self.pendingScrollIndexPath = nil
+            self.earlierLoadAnchor = nil
             self.contentViewCache.removeAll()
             self.cellHeightCache.removeAll()
-            Task {
+            // Land the new reply at the bottom of the screen when the
+            // jump-target scroll consumes this position.
+            self.nextJumpPosition = .bottom
+            Task { [weak self] in
+                guard let self else { return }
                 await self.viewModel.loadTopic(
                     id: self.topicId,
                     containerWidth: self.view.bounds.width,

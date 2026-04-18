@@ -21,6 +21,15 @@ final class AuthManager: @unchecked Sendable {
         usernameCache[baseURL]
     }
 
+    /// Backfill the username cache for a baseURL when a call site discovered
+    /// the current user's identity through another path (e.g., `MeViewModel`
+    /// falling back to `/session/current.json` because the login-time fetch
+    /// failed silently).
+    func setCachedUsername(_ username: String, for baseURL: String) {
+        let normalized = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        usernameCache[normalized] = username
+    }
+
     func login(forum: ForumInstance, presentationAnchor: ASPresentationAnchor) async throws {
         let baseURL = forum.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
 

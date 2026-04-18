@@ -35,7 +35,7 @@
 |-----------|--------|
 | Language | Swift 5 |
 | UI Framework | UIKit |
-| Minimum Target | iOS 17.0 |
+| Minimum Target | iOS 15.0 |
 | Architecture | MVVM + `@Observable` |
 | Build Tool | [Tuist](https://tuist.dev) |
 | Database | SQLite ([GRDB](https://github.com/groue/GRDB.swift)) |

@@ -35,7 +35,7 @@
 |------|------|
 | 语言 | Swift 5 |
 | UI 框架 | UIKit |
-| 最低版本 | iOS 17.0 |
+| 最低版本 | iOS 15.0 |
 | 架构 | MVVM + `@Observable` |
 | 构建工具 | [Tuist](https://tuist.dev) |
 | 数据库 | SQLite ([GRDB](https://github.com/groue/GRDB.swift)) |

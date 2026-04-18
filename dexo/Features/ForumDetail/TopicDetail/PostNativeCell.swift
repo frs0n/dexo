@@ -331,26 +331,26 @@ final class PostNativeCell: UITableViewCell {
             timeLabel.topAnchor.constraint(equalTo: floorLabel.bottomAnchor, constant: 2),
             timeLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
 
-            contentStackView.topAnchor.constraint(equalTo: avatarImageView.bottomAnchor, constant: 8),
+            contentStackView.topAnchor.constraint(equalTo: avatarImageView.bottomAnchor, constant: 12),
             contentStackView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
             contentStackView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
 
-            bottomLeftStack.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 4),
+            bottomLeftStack.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 10),
             bottomLeftStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             bottomLeftStack.heightAnchor.constraint(equalToConstant: Self.bottomBarHeight),
 
-            replyButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 4),
+            replyButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 10),
             replyButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             replyButton.heightAnchor.constraint(equalToConstant: Self.bottomBarHeight),
             replyButton.widthAnchor.constraint(equalToConstant: 28),
             { let c = replyButton.bottomAnchor.constraint(equalTo: separatorLine.topAnchor, constant: -6); c.priority = .init(999); return c }(),
 
-            copyLinkButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 4),
+            copyLinkButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 10),
             copyLinkButton.trailingAnchor.constraint(equalTo: replyButton.leadingAnchor),
             copyLinkButton.heightAnchor.constraint(equalToConstant: Self.bottomBarHeight),
             copyLinkButton.widthAnchor.constraint(equalToConstant: 28),
 
-            reactButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 4),
+            reactButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 10),
             reactButton.trailingAnchor.constraint(equalTo: boostButton.leadingAnchor),
             reactButton.heightAnchor.constraint(equalToConstant: Self.bottomBarHeight),
             // Match the visual rhythm of the other 28pt buttons; allow growth
@@ -363,11 +363,11 @@ final class PostNativeCell: UITableViewCell {
             // Centered like the heart symbol so the swap looks in-place.
             userReactionImageView.centerXAnchor.constraint(equalTo: reactButton.centerXAnchor),
 
-            boostButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 4),
+            boostButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 10),
             boostButton.trailingAnchor.constraint(equalTo: bookmarkButton.leadingAnchor),
             boostButton.heightAnchor.constraint(equalToConstant: Self.bottomBarHeight),
 
-            bookmarkButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 4),
+            bookmarkButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 10),
             bookmarkButton.trailingAnchor.constraint(equalTo: copyLinkButton.leadingAnchor),
             bookmarkButton.heightAnchor.constraint(equalToConstant: Self.bottomBarHeight),
             bookmarkButton.widthAnchor.constraint(equalToConstant: 28),

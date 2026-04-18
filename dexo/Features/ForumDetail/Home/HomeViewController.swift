@@ -506,18 +506,7 @@ final class HomeViewController: ObservableViewController {
     }
 }
 
-extension HomeViewController: UITableViewDelegate, UIScrollViewDelegate {
-    private static let refreshTriggerDistance: CGFloat = 40
-
-    func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        guard scrollView.isDragging, !refreshControl.isRefreshing else { return }
-        let pullDistance = -scrollView.contentOffset.y - scrollView.adjustedContentInset.top
-        if pullDistance > Self.refreshTriggerDistance {
-            refreshControl.beginRefreshing()
-            pullToRefresh()
-        }
-    }
-
+extension HomeViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
         guard let topicId = dataSource.itemIdentifier(for: indexPath) else { return }

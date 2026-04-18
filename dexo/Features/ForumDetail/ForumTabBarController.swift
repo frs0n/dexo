@@ -50,16 +50,28 @@ final class ForumTabBarController: UITabBarController, UITabBarControllerDelegat
 
     // MARK: - UITabBarControllerDelegate
 
+    // iOS 17 and earlier (viewControllers-based tabs)
     func tabBarController(_ tabBarController: UITabBarController, shouldSelect viewController: UIViewController) -> Bool {
-        // Only act when re-tapping the already-selected home tab at its root
-        guard viewController == selectedViewController,
-              let homeNav = navigationControllers.first,
-              viewController == homeNav,
+        guard viewController == selectedViewController else { return true }
+        return !handleHomeTabReTap()
+    }
+
+    // iOS 18+ (UITab-based tabs)
+    @available(iOS 18.0, *)
+    func tabBarController(_ tabBarController: UITabBarController, shouldSelectTab tab: UITab) -> Bool {
+        guard tab == tabBarController.selectedTab else { return true }
+        return !handleHomeTabReTap()
+    }
+
+    /// Returns `true` if the re-tap was handled (home tab at root).
+    private func handleHomeTabReTap() -> Bool {
+        guard let homeNav = navigationControllers.first,
+              homeNav == selectedViewController,
               homeNav.viewControllers.count == 1,
               let homeVC = homeNav.viewControllers.first as? HomeViewController
-        else { return true }
+        else { return false }
 
         homeVC.scrollToTopOrRefresh()
-        return false
+        return true
     }
 }

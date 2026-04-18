@@ -17,7 +17,7 @@ struct NativeRenderConfig {
             linkColor: linkColor,
             codeFont: codeFont,
             codeBackgroundColor: codeBackgroundColor,
-            lineSpacing: baseFont.pointSize * 0.2
+            lineSpacing: baseFont.pointSize * 0.35
         )
     }
 
@@ -90,7 +90,8 @@ enum NativeContentRenderer {
 
             // Poll blocks need extra data from the Post model
             if case .poll(let name) = annotated.block,
-               let pollData = pollProvider?(name) {
+               let pollData = pollProvider?(name)
+            {
                 views.append(PollRenderer.render(
                     poll: pollData.poll,
                     votedOptionIds: pollData.votedOptionIds,
@@ -116,7 +117,8 @@ enum NativeContentRenderer {
                 if !needsInteractive, j > i + 1 {
                     for k in (i + 1)..<j {
                         if case .paragraph(let inl) = annotatedBlocks[k].block,
-                           inlinesNeedTextView(inl) {
+                           inlinesNeedTextView(inl)
+                        {
                             needsInteractive = true
                             break
                         }

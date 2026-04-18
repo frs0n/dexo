@@ -146,6 +146,37 @@ final class DiscourseAPI {
         return try await request(route: .createTopic, parameters: params)
     }
 
+    /// Flag/report a post.
+    /// - `flagTypeId`: 3=off_topic, 4=inappropriate, 7=notify_moderators, 8=spam
+    func flagPost(postId: Int, flagTypeId: Int, message: String? = nil) async throws {
+        var params: [String: Any] = [
+            "id": postId,
+            "post_action_type_id": flagTypeId,
+        ]
+        if let message, !message.isEmpty {
+            params["message"] = message
+        }
+        let _: DiscourseCreatePostResponse = try await request(route: .flagPost, parameters: params)
+    }
+
+    func createPrivateMessage(targetRecipients: String, title: String, raw: String) async throws -> DiscourseCreatePostResponse {
+        let params: [String: Any] = [
+            "archetype": "private_message",
+            "target_recipients": targetRecipients,
+            "title": title,
+            "raw": raw,
+        ]
+        return try await request(route: .createPrivateMessage, parameters: params)
+    }
+
+    func followUser(username: String) async throws {
+        let _: [String: String] = try await request(route: .followUser(username: username))
+    }
+
+    func unfollowUser(username: String) async throws {
+        let _: [String: String] = try await request(route: .unfollowUser(username: username))
+    }
+
     func fetchCustomEmojis() async throws -> [DiscourseCustomEmoji] {
         let siteInfo: DiscourseSiteInfo = try await request(route: .siteInfo)
         return siteInfo.customEmoji ?? []

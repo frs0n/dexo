@@ -12,6 +12,16 @@ final class UserProfileViewModel {
     private let api: DiscourseAPI
     let username: String
 
+    /// Whether the current user is viewing their own profile.
+    var isOwnProfile: Bool {
+        let myUsername = AuthManager.shared.username(for: api.baseURL)
+        return myUsername == username
+    }
+
+    var canSendMessage: Bool {
+        userProfile?.canSendPrivateMessageToUser == true
+    }
+
     init(api: DiscourseAPI, username: String) {
         self.api = api
         self.username = username
@@ -21,14 +31,17 @@ final class UserProfileViewModel {
         isLoading = true
         errorMessage = nil
         do {
-            async let profileTask = api.fetchUserProfile(username: username)
-            async let summaryTask = api.fetchUserSummary(username: username)
-            let (profile, userSummary) = try await (profileTask, summaryTask)
+            let profile = try await api.fetchUserProfile(username: username)
+            let userSummary = try? await api.fetchUserSummary(username: username)
             userProfile = profile
             summary = userSummary
         } catch {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+
+    func sendMessage(title: String, body: String) async throws {
+        try await api.createPrivateMessage(targetRecipients: username, title: title, raw: body)
     }
 }

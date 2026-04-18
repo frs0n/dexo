@@ -168,6 +168,8 @@ struct DiscourseTopicDetail: Decodable {
         var likeAction: ActionSummary? { actionsSummary.first(where: { $0.id == 2 }) }
         var isLikedByCurrentUser: Bool { likeAction?.acted == true }
         var likeCount: Int { likeAction?.count ?? 0 }
+        /// Whether the current user can flag/report this post (ids 3,4,7,8).
+        var canFlag: Bool { actionsSummary.contains { [3, 4, 7, 8].contains($0.id) && $0.canAct == true } }
         var boosts: [Boost]
         var canBoost: Bool
         var polls: [Poll]

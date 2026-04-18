@@ -44,6 +44,7 @@ struct DiscourseUserProfile: Decodable {
     let bioExcerpt: String?
     let flairName: String?
     let flairUrl: String?
+    let canSendPrivateMessageToUser: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id, username, name, title
@@ -56,5 +57,6 @@ struct DiscourseUserProfile: Decodable {
         case bioExcerpt = "bio_excerpt"
         case flairName = "flair_name"
         case flairUrl = "flair_url"
+        case canSendPrivateMessageToUser = "can_send_private_message_to_user"
     }
 }

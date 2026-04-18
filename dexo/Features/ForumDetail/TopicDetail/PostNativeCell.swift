@@ -209,21 +209,13 @@ final class PostNativeCell: UITableViewCell {
         return button
     }()
 
-    private let bookmarkButton: UIButton = {
+    private let moreButton: UIButton = {
         let button = UIButton(type: .system)
         let config = PostNativeCell.symbolConfig
-        button.setImage(UIImage(systemName: "bookmark", withConfiguration: config), for: .normal)
+        button.setImage(UIImage(systemName: "ellipsis", withConfiguration: config), for: .normal)
         button.tintColor = .tertiaryLabel
         button.translatesAutoresizingMaskIntoConstraints = false
-        return button
-    }()
-
-    private let copyLinkButton: UIButton = {
-        let button = UIButton(type: .system)
-        let config = PostNativeCell.symbolConfig
-        button.setImage(UIImage(systemName: "link", withConfiguration: config), for: .normal)
-        button.tintColor = .tertiaryLabel
-        button.translatesAutoresizingMaskIntoConstraints = false
+        button.showsMenuAsPrimaryAction = true
         return button
     }()
 
@@ -291,9 +283,8 @@ final class PostNativeCell: UITableViewCell {
         contentView.addSubview(reactButton)
         reactButton.addSubview(userReactionImageView)
         contentView.addSubview(boostButton)
-        contentView.addSubview(bookmarkButton)
+        contentView.addSubview(moreButton)
         contentView.addSubview(replyButton)
-        contentView.addSubview(copyLinkButton)
         contentView.addSubview(separatorLine)
 
         avatarWidthConstraint = avatarImageView.widthAnchor.constraint(equalToConstant: Self.baseAvatarSize)
@@ -339,16 +330,16 @@ final class PostNativeCell: UITableViewCell {
             bottomLeftStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             bottomLeftStack.heightAnchor.constraint(equalToConstant: Self.bottomBarHeight),
 
+            moreButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 10),
+            moreButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            moreButton.heightAnchor.constraint(equalToConstant: Self.bottomBarHeight),
+            moreButton.widthAnchor.constraint(equalToConstant: 28),
+            { let c = moreButton.bottomAnchor.constraint(equalTo: separatorLine.topAnchor, constant: -6); c.priority = .init(999); return c }(),
+
             replyButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 10),
-            replyButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            replyButton.trailingAnchor.constraint(equalTo: moreButton.leadingAnchor),
             replyButton.heightAnchor.constraint(equalToConstant: Self.bottomBarHeight),
             replyButton.widthAnchor.constraint(equalToConstant: 28),
-            { let c = replyButton.bottomAnchor.constraint(equalTo: separatorLine.topAnchor, constant: -6); c.priority = .init(999); return c }(),
-
-            copyLinkButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 10),
-            copyLinkButton.trailingAnchor.constraint(equalTo: replyButton.leadingAnchor),
-            copyLinkButton.heightAnchor.constraint(equalToConstant: Self.bottomBarHeight),
-            copyLinkButton.widthAnchor.constraint(equalToConstant: 28),
 
             reactButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 10),
             reactButton.trailingAnchor.constraint(equalTo: boostButton.leadingAnchor),
@@ -364,13 +355,8 @@ final class PostNativeCell: UITableViewCell {
             userReactionImageView.centerXAnchor.constraint(equalTo: reactButton.centerXAnchor),
 
             boostButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 10),
-            boostButton.trailingAnchor.constraint(equalTo: bookmarkButton.leadingAnchor),
+            boostButton.trailingAnchor.constraint(equalTo: replyButton.leadingAnchor),
             boostButton.heightAnchor.constraint(equalToConstant: Self.bottomBarHeight),
-
-            bookmarkButton.topAnchor.constraint(equalTo: contentStackView.bottomAnchor, constant: 10),
-            bookmarkButton.trailingAnchor.constraint(equalTo: copyLinkButton.leadingAnchor),
-            bookmarkButton.heightAnchor.constraint(equalToConstant: Self.bottomBarHeight),
-            bookmarkButton.widthAnchor.constraint(equalToConstant: 28),
 
             separatorLine.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             separatorLine.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
@@ -379,7 +365,6 @@ final class PostNativeCell: UITableViewCell {
         ])
 
         showRepliesButton.addTarget(self, action: #selector(repliesButtonTapped), for: .touchUpInside)
-        copyLinkButton.addTarget(self, action: #selector(copyLinkTapped), for: .touchUpInside)
         replyButton.addTarget(self, action: #selector(replyButtonTapped), for: .touchUpInside)
         reactButton.addTarget(self, action: #selector(reactButtonTapped), for: .touchUpInside)
         let reactLongPress = UILongPressGestureRecognizer(target: self, action: #selector(reactButtonLongPressed(_:)))
@@ -387,7 +372,6 @@ final class PostNativeCell: UITableViewCell {
         boostButton.addTarget(self, action: #selector(boostButtonTapped), for: .touchUpInside)
         let longPress = UILongPressGestureRecognizer(target: self, action: #selector(boostButtonLongPressed(_:)))
         boostButton.addGestureRecognizer(longPress)
-        bookmarkButton.addTarget(self, action: #selector(bookmarkButtonTapped), for: .touchUpInside)
 
         avatarImageView.isUserInteractionEnabled = true
         let avatarTap = UITapGestureRecognizer(target: self, action: #selector(avatarTapped))
@@ -541,11 +525,8 @@ final class PostNativeCell: UITableViewCell {
         boostButton.isHidden = !post.canBoost && boostCount == 0
         boostButton.isEnabled = post.canBoost || boostCount > 0
 
-        // Bookmark
-        let bookmarkSymbol = post.bookmarked ? "bookmark.fill" : "bookmark"
-        let bookmarkConfig = Self.symbolConfig
-        bookmarkButton.setImage(UIImage(systemName: bookmarkSymbol, withConfiguration: bookmarkConfig), for: .normal)
-        bookmarkButton.tintColor = post.bookmarked ? .systemYellow : .tertiaryLabel
+        // More menu (copy link, bookmark, flag)
+        updateMoreMenu()
 
         // Render content blocks — three tiers of reuse:
         // 1. Same cell + same post → skip entirely (cheapest)
@@ -768,16 +749,42 @@ final class PostNativeCell: UITableViewCell {
         delegate?.postCell(didTapAvatarForUsername: username)
     }
 
-    @objc private func copyLinkTapped() {
-        guard let link = postLink else { return }
-        UIPasteboard.general.string = link
-        let config = Self.symbolConfig
-        copyLinkButton.setImage(UIImage(systemName: "checkmark", withConfiguration: config), for: .normal)
-        copyLinkButton.tintColor = .systemGreen
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            self?.copyLinkButton.setImage(UIImage(systemName: "link", withConfiguration: config), for: .normal)
-            self?.copyLinkButton.tintColor = .tertiaryLabel
+    private func updateMoreMenu() {
+        guard let post = currentPost else { return }
+        var actions: [UIAction] = []
+
+        // Copy Link
+        actions.append(UIAction(
+            title: String(localized: "post.copy_link"),
+            image: UIImage(systemName: "link")
+        ) { [weak self] _ in
+            guard let link = self?.postLink else { return }
+            UIPasteboard.general.string = link
+        })
+
+        // Bookmark
+        let isBookmarked = post.bookmarked
+        actions.append(UIAction(
+            title: isBookmarked ? String(localized: "post.remove_bookmark") : String(localized: "post.bookmark"),
+            image: UIImage(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
+        ) { [weak self] _ in
+            guard let self, let post = self.currentPost else { return }
+            self.delegate?.postCell(didToggleBookmarkForPost: post, isBookmarked: !isBookmarked)
+        })
+
+        // Flag / Report — only if the server says we can
+        if post.canFlag {
+            actions.append(UIAction(
+                title: String(localized: "post.flag"),
+                image: UIImage(systemName: "flag"),
+                attributes: .destructive
+            ) { [weak self] _ in
+                guard let self, let post = self.currentPost else { return }
+                self.delegate?.postCell(didTapFlagPost: post)
+            })
         }
+
+        moreButton.menu = UIMenu(children: actions)
     }
 
     @objc private func reactButtonTapped() {
@@ -965,20 +972,6 @@ final class PostNativeCell: UITableViewCell {
         delegate?.postCell(didTapBoostForPost: post)
     }
 
-    @objc private func bookmarkButtonTapped() {
-        guard let post = currentPost else { return }
-        let config = Self.symbolConfig
-        let isFilled = bookmarkButton.image(for: .normal) == UIImage(systemName: "bookmark.fill", withConfiguration: config)
-        if isFilled {
-            bookmarkButton.setImage(UIImage(systemName: "bookmark", withConfiguration: config), for: .normal)
-            bookmarkButton.tintColor = .tertiaryLabel
-        } else {
-            bookmarkButton.setImage(UIImage(systemName: "bookmark.fill", withConfiguration: config), for: .normal)
-            bookmarkButton.tintColor = .systemYellow
-        }
-        delegate?.postCell(didToggleBookmarkForPost: post, isBookmarked: !isFilled)
-    }
-
     override func prepareForReuse() {
         super.prepareForReuse()
         // Keep content views alive — they will be reused if the same post is
@@ -1024,10 +1017,7 @@ final class PostNativeCell: UITableViewCell {
         boostButton.tintColor = .tertiaryLabel
         boostButton.isHidden = false
         boostButton.isEnabled = true
-        bookmarkButton.setImage(UIImage(systemName: "bookmark", withConfiguration: config), for: .normal)
-        bookmarkButton.tintColor = .tertiaryLabel
-        copyLinkButton.setImage(UIImage(systemName: "link", withConfiguration: config), for: .normal)
-        copyLinkButton.tintColor = .tertiaryLabel
+        moreButton.menu = nil
         separatorLine.isHidden = false
     }
 

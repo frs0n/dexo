@@ -86,8 +86,14 @@ final class NotificationCell: UITableViewCell {
     }
 
     func configure(with notification: DiscourseNotification) {
-        titleLabel.text = notification.data.topicTitle ?? String(localized: "notifications.unknown")
-        detailLabel.text = notification.data.displayUsername
+        // Badge notifications (type 12) have badge_name instead of topic_title
+        if notification.notificationType == 12, let badgeName = notification.data.badgeName {
+            titleLabel.text = String(localized: "notifications.badge_granted \(badgeName)")
+            detailLabel.text = nil
+        } else {
+            titleLabel.text = notification.data.topicTitle ?? String(localized: "notifications.unknown")
+            detailLabel.text = notification.data.displayUsername ?? notification.data.username
+        }
         timeLabel.text = Self.formatDate(notification.createdAt)
         unreadDot.isHidden = notification.read
         iconImageView.image = Self.icon(for: notification.notificationType)
@@ -116,16 +122,21 @@ final class NotificationCell: UITableViewCell {
         case 4: name = "pencil"                         // edited
         case 5: name = "heart.fill"                     // liked
         case 6: name = "envelope.fill"                  // private message
-        case 7: name = "trophy.fill"                    // granted badge
-        case 8: name = "person.fill"                    // invited to topic
-        case 9: name = "link"                           // link
-        case 11: name = "arrow.triangle.merge"          // moved post
-        case 12: name = "person.2.fill"                 // group mentioned
-        case 13: name = "tag.fill"                      // watching first post
-        case 14: name = "star.fill"                     // topic reminder
-        case 15: name = "heart.fill"                    // liked consolidated
-        case 16: name = "megaphone.fill"                // post approved
-        case 17: name = "checkmark.seal.fill"           // code review
+        case 7: name = "envelope.badge.person.crop"     // invited to private message
+        case 8: name = "person.fill.checkmark"          // invitee accepted
+        case 9: name = "text.bubble"                    // posted
+        case 10: name = "arrow.triangle.merge"          // moved post
+        case 11: name = "link"                          // linked
+        case 12: name = "trophy.fill"                   // granted badge
+        case 13: name = "person.fill"                   // invited to topic
+        case 14: name = "bell.badge"                    // custom
+        case 15: name = "person.2.fill"                 // group mentioned
+        case 16: name = "tray.full.fill"                // group message summary
+        case 17: name = "tag.fill"                      // watching first post
+        case 18: name = "star.fill"                     // topic reminder
+        case 19: name = "heart.fill"                    // liked consolidated
+        case 20: name = "megaphone.fill"                // post approved
+        case 21: name = "checkmark.seal.fill"           // code review
         default: name = "bell.fill"
         }
         return UIImage(systemName: name)

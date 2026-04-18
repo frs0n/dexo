@@ -37,15 +37,19 @@ enum DiscourseRouter {
     case removePollVote
     case markNotificationRead
     case topicTimings
+    case createPrivateMessage
+    case flagPost
+    case followUser(username: String)
+    case unfollowUser(username: String)
     case messageBusPoll(clientId: String)
 
     var method: HTTPMethod {
         switch self {
-        case .createTopic, .createBookmark, .createBoost, .uploadImage, .topicTimings, .messageBusPoll, .likePost:
+        case .createTopic, .createBookmark, .createBoost, .uploadImage, .topicTimings, .messageBusPoll, .likePost, .createPrivateMessage, .flagPost:
             return .post
-        case .toggleReaction, .votePoll, .markNotificationRead:
+        case .toggleReaction, .votePoll, .markNotificationRead, .followUser:
             return .put
-        case .deleteBookmark, .deleteBoost, .removePollVote, .unlikePost:
+        case .deleteBookmark, .deleteBoost, .removePollVote, .unlikePost, .unfollowUser:
             return .delete
         default:
             return .get
@@ -144,6 +148,14 @@ enum DiscourseRouter {
             return "/notifications/mark-read"
         case .topicTimings:
             return "/topics/timings"
+        case .createPrivateMessage:
+            return "/posts.json"
+        case .flagPost:
+            return "/post_actions"
+        case .followUser(let username):
+            return "/u/\(username)/follow"
+        case .unfollowUser(let username):
+            return "/u/\(username)/follow"
         case .messageBusPoll(let clientId):
             return "/message-bus/\(clientId)/poll"
         }

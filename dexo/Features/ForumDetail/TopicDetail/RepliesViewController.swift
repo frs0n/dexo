@@ -416,4 +416,8 @@ extension RepliesViewController: PostCellDelegate {
     func postCell(didRemovePollVote pollName: String, forPost post: DiscourseTopicDetail.Post) {
         // Voting not supported in replies sheet
     }
+
+    func postCell(didTapFlagPost post: DiscourseTopicDetail.Post) {
+        // Flag not supported in replies sheet
+    }
 }

@@ -38,6 +38,7 @@ final class SettingsViewController: ObservableViewController {
     private enum Section: Int, CaseIterable {
         case general
         case appearance
+        case storage
         #if DEBUG
         case debug
         #endif
@@ -47,11 +48,12 @@ final class SettingsViewController: ObservableViewController {
     /// Sections actually shown in the table, in order.
     private var visibleSections: [Section] {
         #if DEBUG
-        return [.general, .appearance, .debug]
+        return [.general, .appearance, .storage, .debug]
         #else
-        return [.general, .appearance]
+        return [.general, .appearance, .storage]
         #endif
     }
+
 
     private func networkRows() -> [NetworkRow] {
         var rows: [NetworkRow] = [.dohToggle]
@@ -82,6 +84,7 @@ extension SettingsViewController: UITableViewDataSource {
         switch visibleSections[section] {
         case .general: return 2
         case .appearance: return 3
+        case .storage: return 1
         case .network: return networkRows().count
         #if DEBUG
         case .debug: return 1
@@ -93,6 +96,7 @@ extension SettingsViewController: UITableViewDataSource {
         switch visibleSections[section] {
         case .general: return String(localized: "settings.section.general")
         case .appearance: return String(localized: "settings.section.appearance")
+        case .storage: return String(localized: "settings.section.storage")
         case .network: return String(localized: "settings.section.network")
         #if DEBUG
         case .debug: return "Debug"
@@ -116,6 +120,8 @@ extension SettingsViewController: UITableViewDataSource {
             } else {
                 return makeFontSizeCell(tableView, indexPath: indexPath)
             }
+        case .storage:
+            return makeStorageCell(tableView, indexPath: indexPath)
         case .network:
             let row = networkRows()[indexPath.row]
             switch row {
@@ -225,6 +231,14 @@ extension SettingsViewController: UITableViewDataSource {
         return cell
     }
 
+    private func makeStorageCell(_ tableView: UITableView, indexPath: IndexPath) -> UITableViewCell {
+        let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+        applyFonts(to: cell)
+        cell.textLabel?.text = String(localized: "settings.clear_cache")
+        cell.accessoryType = .disclosureIndicator
+        return cell
+    }
+
     #if DEBUG
     private func makeRenderPreviewCell(_ tableView: UITableView, indexPath: IndexPath) -> UITableViewCell {
         let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
@@ -257,6 +271,9 @@ extension SettingsViewController: UITableViewDelegate {
                 let vc = FontSizeViewController()
                 navigationController?.pushViewController(vc, animated: true)
             }
+        case .storage:
+            let vc = CacheViewController()
+            navigationController?.pushViewController(vc, animated: true)
         case .network:
             let row = networkRows()[indexPath.row]
             switch row {

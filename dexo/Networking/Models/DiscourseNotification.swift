@@ -43,10 +43,14 @@ struct DiscourseNotification: Decodable, Identifiable {
     struct NotificationData: Decodable {
         let topicTitle: String?
         let displayUsername: String?
+        let badgeName: String?
+        let username: String?
 
         enum CodingKeys: String, CodingKey {
             case topicTitle = "topic_title"
             case displayUsername = "display_username"
+            case badgeName = "badge_name"
+            case username
         }
     }
 }

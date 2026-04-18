@@ -18,18 +18,20 @@ final class MeViewController: ObservableViewController {
         return tv
     }()
 
-    private let activityIndicator: UIActivityIndicatorView = {
-        let ai = UIActivityIndicatorView(style: .medium)
-        ai.hidesWhenStopped = true
-        ai.translatesAutoresizingMaskIntoConstraints = false
-        return ai
-    }()
-
     private lazy var refreshControl: UIRefreshControl = {
         let rc = UIRefreshControl()
         rc.addTarget(self, action: #selector(pullToRefresh), for: .valueChanged)
         return rc
     }()
+
+    private lazy var skeletonView: MeSkeletonView = {
+        let v = MeSkeletonView()
+        v.translatesAutoresizingMaskIntoConstraints = false
+        return v
+    }()
+
+    /// Track whether the first load has completed, to show skeleton only once.
+    private var hasLoaded = false
 
     init(api: DiscourseAPI, authGate: AuthGating? = nil) {
         self.api = api
@@ -52,7 +54,7 @@ final class MeViewController: ObservableViewController {
         tableView.refreshControl = refreshControl
 
         view.addSubview(tableView)
-        view.addSubview(activityIndicator)
+        view.addSubview(skeletonView)
 
         NSLayoutConstraint.activate([
             tableView.topAnchor.constraint(equalTo: view.topAnchor),
@@ -60,8 +62,10 @@ final class MeViewController: ObservableViewController {
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            activityIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            skeletonView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            skeletonView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            skeletonView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            skeletonView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
 
         profileHeader.onLoginTapped = { [weak self] in
@@ -72,21 +76,45 @@ final class MeViewController: ObservableViewController {
             self?.handleStatTapped(statType)
         }
 
+        let isLoggedIn = authGate?.isAuthenticated() ?? false
+        if isLoggedIn {
+            skeletonView.isHidden = false
+            tableView.isHidden = true
+        } else {
+            skeletonView.isHidden = true
+            hasLoaded = true
+        }
+
         loadData()
     }
 
     override func updateUI() {
-        if viewModel.isLoading {
-            activityIndicator.startAnimating()
-        } else {
-            activityIndicator.stopAnimating()
+        // Show skeleton on first load, hide once data arrives
+        if !hasLoaded, viewModel.isLoading {
+            skeletonView.isHidden = false
+            tableView.isHidden = true
+            return
+        }
+        if !hasLoaded, !viewModel.isLoading {
+            hasLoaded = true
+            UIView.animate(withDuration: 0.25) {
+                self.skeletonView.alpha = 0
+            } completion: { _ in
+                self.skeletonView.isHidden = true
+                self.skeletonView.removeFromSuperview()
+            }
+            tableView.isHidden = false
         }
 
         if let error = viewModel.errorMessage {
             let alert = UIAlertController(title: nil, message: error, preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: String(localized: "action.cancel"), style: .cancel))
             present(alert, animated: true)
-            viewModel.errorMessage = nil
+            // Defer the reset to avoid writing an observed property
+            // inside withPerceptionTracking — that can corrupt internal state.
+            DispatchQueue.main.async { [weak self] in
+                self?.viewModel.errorMessage = nil
+            }
             return
         }
 

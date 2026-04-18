@@ -1196,6 +1196,70 @@ extension TopicDetailViewController: PostCellDelegate {
         }
     }
 
+    func postCell(didTapFlagPost post: DiscourseTopicDetail.Post) {
+        let alert = UIAlertController(
+            title: String(localized: "post.flag"),
+            message: String(localized: "post.flag.message"),
+            preferredStyle: .actionSheet
+        )
+        let flagTypes: [(String, Int)] = [
+            (String(localized: "post.flag.off_topic"), 3),
+            (String(localized: "post.flag.inappropriate"), 4),
+            (String(localized: "post.flag.spam"), 8),
+        ]
+        for (title, typeId) in flagTypes {
+            alert.addAction(UIAlertAction(title: title, style: .destructive) { [weak self] _ in
+                guard let self else { return }
+                Task {
+                    do {
+                        try await self.api.flagPost(postId: post.id, flagTypeId: typeId)
+                        let done = UIAlertController(title: nil, message: String(localized: "post.flag.sent"), preferredStyle: .alert)
+                        done.addAction(UIAlertAction(title: String(localized: "action.ok"), style: .default))
+                        self.present(done, animated: true)
+                    } catch {
+                        let fail = UIAlertController(title: nil, message: error.localizedDescription, preferredStyle: .alert)
+                        fail.addAction(UIAlertAction(title: String(localized: "action.ok"), style: .default))
+                        self.present(fail, animated: true)
+                    }
+                }
+            })
+        }
+        // Notify moderators with custom message
+        alert.addAction(UIAlertAction(title: String(localized: "post.flag.notify_moderators"), style: .default) { [weak self] _ in
+            self?.presentFlagWithMessage(post: post)
+        })
+        alert.addAction(UIAlertAction(title: String(localized: "action.cancel"), style: .cancel))
+        present(alert, animated: true)
+    }
+
+    private func presentFlagWithMessage(post: DiscourseTopicDetail.Post) {
+        let alert = UIAlertController(
+            title: String(localized: "post.flag.notify_moderators"),
+            message: nil,
+            preferredStyle: .alert
+        )
+        alert.addTextField { tf in
+            tf.placeholder = String(localized: "post.flag.reason_placeholder")
+        }
+        alert.addAction(UIAlertAction(title: String(localized: "post.flag.send"), style: .destructive) { [weak self] _ in
+            guard let self, let message = alert.textFields?.first?.text, !message.isEmpty else { return }
+            Task {
+                do {
+                    try await self.api.flagPost(postId: post.id, flagTypeId: 7, message: message)
+                    let done = UIAlertController(title: nil, message: String(localized: "post.flag.sent"), preferredStyle: .alert)
+                    done.addAction(UIAlertAction(title: String(localized: "action.ok"), style: .default))
+                    self.present(done, animated: true)
+                } catch {
+                    let fail = UIAlertController(title: nil, message: error.localizedDescription, preferredStyle: .alert)
+                    fail.addAction(UIAlertAction(title: String(localized: "action.ok"), style: .default))
+                    self.present(fail, animated: true)
+                }
+            }
+        })
+        alert.addAction(UIAlertAction(title: String(localized: "action.cancel"), style: .cancel))
+        present(alert, animated: true)
+    }
+
     private func reconfigurePost(_ postId: Int) {
         var snapshot = dataSource.snapshot()
         let item = TopicDetailItem.post(postId)

@@ -22,10 +22,14 @@ final class MeViewModel {
         errorMessage = nil
         do {
             let username = AuthManager.shared.username(for: api.baseURL) ?? ""
-            async let profileTask = api.fetchUserProfile(username: username)
-            currentUser = await DiscourseCurrentUser(id: profileTask.id, username: profileTask.username, name: profileTask.name, avatarTemplate: profileTask.avatarTemplate, unreadNotifications: nil, unreadPrivateMessages: nil, unreadHighPriorityNotifications: nil)
-            async let summaryTask = api.fetchUserSummary(username: username)
-            let (profile, userSummary) = try await (profileTask, summaryTask)
+            let profile = try await api.fetchUserProfile(username: username)
+            let userSummary = try? await api.fetchUserSummary(username: username)
+            currentUser = DiscourseCurrentUser(
+                id: profile.id, username: profile.username,
+                name: profile.name, avatarTemplate: profile.avatarTemplate,
+                unreadNotifications: nil, unreadPrivateMessages: nil,
+                unreadHighPriorityNotifications: nil
+            )
             userProfile = profile
             summary = userSummary
         } catch {

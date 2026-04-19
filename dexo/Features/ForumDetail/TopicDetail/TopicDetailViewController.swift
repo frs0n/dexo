@@ -68,7 +68,23 @@ final class TopicDetailViewController: ObservableViewController {
     private var lastScrollOffset: CGFloat = 0
     /// VC-level cache of rendered content views keyed by post ID.
     /// Avoids re-creating the entire view tree when scrolling back to a post.
-    private var contentViewCache: [Int: [UIView]] = [:]
+    /// Bounded — every cached entry pins a tree of UILabel / UITextView with
+    /// their CALayer-rasterized backing stores (~150–200KB per text view in
+    /// memory). With no cap this grows unbounded as the reader scrolls
+    /// through long topics; capping at ~15 posts keeps the working set in
+    /// the same shape as the visible window plus a small buffer.
+    private lazy var contentViewCache: LRUCache<Int, [UIView]> = {
+        let cache = LRUCache<Int, [UIView]>(capacity: 15)
+        cache.onEvict = { [weak self] postId, _ in
+            // Keep the side caches in lockstep — the height/precompute info
+            // is only useful while the views it describes are still cached.
+            self?.precomputedBlockHeights.removeValue(forKey: postId)
+            self?.precomputedTotalHeights.removeValue(forKey: postId)
+            self?.cellHeightCache.removeValue(forKey: .post(postId))
+            self?.cellHeightCache.removeValue(forKey: .boosts(postId))
+        }
+        return cache
+    }()
     /// Suppress load-earlier after a jump until user scrolls down first
     private var suppressLoadEarlier = false
     /// Anchor info for restoring scroll position after loading earlier posts

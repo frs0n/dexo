@@ -95,8 +95,8 @@ enum BlockHeightCalculator {
         case .heading(let level, let inlines):
             return headingHeight(level: level, inlines: inlines, config: config)
 
-        case .image(let src, _, let width, let height, _):
-            return imageHeight(width: width, height: height, src: src, containerWidth: config.contentWidth)
+        case .image(_, _, let width, let height, _):
+            return imageHeight(width: width, height: height, containerWidth: config.contentWidth)
 
         case .divider:
             return Self.dividerHeight
@@ -117,8 +117,8 @@ enum BlockHeightCalculator {
         case .list(let ordered, let items):
             return listHeight(ordered: ordered, items: items, config: config)
 
-        case .video(_, let thumbnailURL, _, let width, let height, _, _):
-            return imageHeight(width: width, height: height, src: thumbnailURL, containerWidth: config.contentWidth)
+        case .video(_, _, _, let width, let height, _, _):
+            return imageHeight(width: width, height: height, containerWidth: config.contentWidth)
 
         case .spoiler(let blocks):
             return spoilerHeight(blocks: blocks, config: config)
@@ -222,32 +222,15 @@ enum BlockHeightCalculator {
 
     // MARK: - Image
 
-    /// Mirrors `TappableImageContainer.init`'s height formula. Consults
-    /// `ImageDimensionCache` when HTML didn't provide both dimensions; falls
-    /// back to the 16:9 placeholder ratio when nothing is known yet.
+    /// Mirrors `TappableImageContainer.init`'s height formula. Falls back to a
+    /// 16:9 placeholder when HTML didn't supply dimensions; the renderer's
+    /// post-load fix-up corrects the height once the image arrives.
     private static func imageHeight(
         width: Int?,
         height: Int?,
-        src: String?,
         containerWidth: CGFloat
     ) -> CGFloat {
-        let resolvedW: Int?
-        let resolvedH: Int?
         if let w = width, let h = height, w > 0, h > 0 {
-            resolvedW = w
-            resolvedH = h
-        } else if let src, let url = URL(string: src),
-                  let cached = ImageDimensionCache.shared.size(for: url),
-                  cached.width > 0, cached.height > 0
-        {
-            resolvedW = Int(cached.width)
-            resolvedH = Int(cached.height)
-        } else {
-            resolvedW = nil
-            resolvedH = nil
-        }
-
-        if let w = resolvedW, let h = resolvedH {
             let fraction = min(CGFloat(w) / Self.imageReferenceWidth, 1)
             let displayWidth = containerWidth * fraction
             return CGFloat(h) * (displayWidth / CGFloat(w))
@@ -570,15 +553,11 @@ enum BlockHeightCalculator {
 
         // Optional image wrapper.
         var imageBlockH: CGFloat = 0
-        if let imageURL, let url = URL(string: imageURL) {
+        if let imageURL, URL(string: imageURL) != nil {
             let displayWidth = containerWidth - 24
             let imageH: CGFloat
             if let w = imageWidth, let h = imageHeight, w > 0 {
                 imageH = displayWidth * CGFloat(h) / CGFloat(w)
-            } else if let cached = ImageDimensionCache.shared.size(for: url),
-                      cached.width > 0
-            {
-                imageH = displayWidth * cached.height / cached.width
             } else {
                 imageH = displayWidth * 9.0 / 16.0
             }

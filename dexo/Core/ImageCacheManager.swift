@@ -34,8 +34,8 @@ final class ImageCacheManager {
         emojiCache.config.maxMemoryCount = 150
         contentCache.config.maxMemoryCost = 50 * 1024 * 1024      // 50 MiB
         contentCache.config.maxMemoryCount = 80
-        avatarCache.config.maxMemoryCost = 10 * 1024 * 1024       // 10 MiB
-        avatarCache.config.maxMemoryCount = 200
+        avatarCache.config.maxMemoryCost = 30 * 1024 * 1024       // 30 MiB
+        avatarCache.config.maxMemoryCount = 1500
 
         avatarContext = [.imageCache: avatarCache]
         emojiContext = [.imageCache: emojiCache]

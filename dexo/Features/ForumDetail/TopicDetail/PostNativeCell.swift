@@ -471,11 +471,31 @@ final class PostNativeCell: UITableViewCell {
             userTitleLabel.isHidden = true
         }
 
-        // Flair badge intentionally hidden — avatar flair images cost an
-        // extra SDWebImage load per visible cell with no UX value the
-        // readers have asked for. Restore the load branch from git history
-        // (look for `post.flairUrl`) if the policy changes.
-        flairImageView.isHidden = true
+        // Flair badge — loaded as a single static frame regardless of source
+        // format. Some users upload 512×512 animated GIFs as flair (one
+        // observed example was 2.8 MiB decoded), and at the ~14pt badge
+        // size animation isn't perceivable anyway. `.decodeFirstFrameOnly`
+        // skips the multi-frame decode; `imageThumbnailPixelSize` further
+        // downsamples to the actual display resolution before caching, so
+        // each flair lands in `avatarCache` as a few KiB instead of MiBs.
+        if let flairUrl = post.flairUrl, !flairUrl.isEmpty {
+            let urlString = flairUrl.hasPrefix("http") ? flairUrl : baseURL + flairUrl
+            if let url = URL(string: urlString) {
+                if let bgColor = post.flairBgColor, !bgColor.isEmpty {
+                    flairImageView.backgroundColor = UIColor(hex: bgColor)
+                }
+                var context = ImageCacheManager.shared.avatarContext
+                let pixelSide = flairSize * UIScreen.main.scale
+                context[.imageThumbnailPixelSize] = NSValue(cgSize: CGSize(width: pixelSide, height: pixelSide))
+                flairImageView.sd_setImage(
+                    with: url,
+                    placeholderImage: nil,
+                    options: [.decodeFirstFrameOnly],
+                    context: context
+                )
+                flairImageView.isHidden = false
+            }
+        }
 
         if let replyUser = post.replyToUser {
             let attachment = NSTextAttachment()

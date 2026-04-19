@@ -144,8 +144,30 @@ final class ThemeManager {
     /// Stored property — bumped on every theme change so `withObservationTracking` fires.
     private(set) var revision: Int = 0
 
+    // Caches invalidated by bumping `revision`. `@PerceptionIgnored` keeps these
+    // out of observation tracking — otherwise the lazy fill inside a getter
+    // would notify observers and re-trigger the very work we're caching.
+    @PerceptionIgnored private var _cachedTheme: ThemeDefinition?
+    @PerceptionIgnored private var _cachedThemeRevision: Int = -1
+    @PerceptionIgnored private var _accentColor: UIColor?
+    @PerceptionIgnored private var _backgroundColor: UIColor?
+    @PerceptionIgnored private var _cardBackgroundColor: UIColor?
+    @PerceptionIgnored private var _codeBackgroundColor: UIColor?
+    @PerceptionIgnored private var _quoteBarColor: UIColor?
+
     var currentTheme: ThemeDefinition {
         _ = revision
+        if _cachedThemeRevision == revision, let cached = _cachedTheme {
+            return cached
+        }
+        let computed = computeCurrentTheme()
+        invalidateColorCaches()
+        _cachedTheme = computed
+        _cachedThemeRevision = revision
+        return computed
+    }
+
+    private func computeCurrentTheme() -> ThemeDefinition {
         let selectedId = settings.selectedThemeId
         if selectedId.hasPrefix("custom_") {
             let schemeId = String(selectedId.dropFirst("custom_".count))
@@ -157,35 +179,65 @@ final class ThemeManager {
             ?? ThemeDefinition.presets[0]
     }
 
+    private func invalidateColorCaches() {
+        _accentColor = nil
+        _backgroundColor = nil
+        _cardBackgroundColor = nil
+        _codeBackgroundColor = nil
+        _quoteBarColor = nil
+    }
+
     // MARK: - Dynamic Colors
 
     /// Accent / tint color that adapts to light/dark mode
     var accentColor: UIColor {
-        dynamicColor(light: currentTheme.lightAccentHex, dark: currentTheme.darkAccentHex)
+        if let c = _accentColor { return c }
+        let theme = currentTheme
+        let color = dynamicColor(light: theme.lightAccentHex, dark: theme.darkAccentHex)
+        _accentColor = color
+        return color
     }
 
     /// Page background (replaces systemGroupedBackground)
     var backgroundColor: UIColor {
-        dynamicColor(light: currentTheme.lightBackgroundHex, dark: currentTheme.darkBackgroundHex)
+        if let c = _backgroundColor { return c }
+        let theme = currentTheme
+        let color = dynamicColor(light: theme.lightBackgroundHex, dark: theme.darkBackgroundHex)
+        _backgroundColor = color
+        return color
     }
 
     /// Card / cell background (replaces secondarySystemGroupedBackground)
     var cardBackgroundColor: UIColor {
-        dynamicColor(light: currentTheme.lightCardBackgroundHex, dark: currentTheme.darkCardBackgroundHex)
+        if let c = _cardBackgroundColor { return c }
+        let theme = currentTheme
+        let color = dynamicColor(light: theme.lightCardBackgroundHex, dark: theme.darkCardBackgroundHex)
+        _cardBackgroundColor = color
+        return color
     }
 
     /// Code block / quote background — accent at very low opacity over card background
     var codeBackgroundColor: UIColor {
-        UIColor { [self] traitCollection in
-            let accent = accentColor.resolvedColor(with: traitCollection)
-            let card = cardBackgroundColor.resolvedColor(with: traitCollection)
-            return accent.blended(into: card, ratio: 0.08)
+        if let c = _codeBackgroundColor { return c }
+        // Capture the cached accent/card UIColors so the trait-resolved closure
+        // doesn't bounce back through ThemeManager getters on every resolve.
+        let accent = accentColor
+        let card = cardBackgroundColor
+        let color = UIColor { traitCollection in
+            let a = accent.resolvedColor(with: traitCollection)
+            let c = card.resolvedColor(with: traitCollection)
+            return a.blended(into: c, ratio: 0.08)
         }
+        _codeBackgroundColor = color
+        return color
     }
 
     /// Blockquote / quote left bar — accent at medium opacity
     var quoteBarColor: UIColor {
-        accentColor.withAlphaComponent(0.4)
+        if let c = _quoteBarColor { return c }
+        let color = accentColor.withAlphaComponent(0.4)
+        _quoteBarColor = color
+        return color
     }
 
     // MARK: - Apply

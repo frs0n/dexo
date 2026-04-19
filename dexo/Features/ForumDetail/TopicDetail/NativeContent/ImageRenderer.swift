@@ -40,9 +40,28 @@ final class TappableImageContainer: UIView {
 
         addSubview(imageView)
 
+        // Resolve render dimensions in priority order:
+        // 1. HTML attributes (Discourse cooked HTML almost always supplies these)
+        // 2. Disk-persisted cache from a previous load of the same URL
+        // 3. 16:9 fallback that gets fixed up after the image loads
+        let resolvedWidth: Int?
+        let resolvedHeight: Int?
+        if let w = width, let h = height, w > 0, h > 0 {
+            resolvedWidth = w
+            resolvedHeight = h
+        } else if let cached = ImageDimensionCache.shared.size(for: url),
+                  cached.width > 0, cached.height > 0
+        {
+            resolvedWidth = Int(cached.width)
+            resolvedHeight = Int(cached.height)
+        } else {
+            resolvedWidth = nil
+            resolvedHeight = nil
+        }
+
         let displayWidth: CGFloat
         let displayHeight: CGFloat
-        if let w = width, let h = height, w > 0 {
+        if let w = resolvedWidth, let h = resolvedHeight {
             let fraction = min(CGFloat(w) / Self.referenceWidth, 1)
             displayWidth = containerWidth * fraction
             displayHeight = CGFloat(h) * (displayWidth / CGFloat(w))
@@ -81,11 +100,17 @@ final class TappableImageContainer: UIView {
         // Pause GIF animation by default; resumed when visible on screen
         (imageView as? SDAnimatedImageView)?.autoPlayAnimatedImage = false
 
-        let hasOriginalSize = width != nil && height != nil
+        // Skip the post-load height fix-up when render dims came from HTML or
+        // from the dimension cache — both are pixel-accurate aspect ratios, so
+        // any per-frame difference would just be sub-pixel jitter that triggers
+        // a needless `beginUpdates`/`endUpdates`.
+        let hasResolvedSize = resolvedWidth != nil && resolvedHeight != nil
 
         imageView.sd_setImage(with: url, placeholderImage: nil, options: [], context: ImageCacheManager.shared.contentContext, progress: nil) { [weak self] image, _, _, _ in
             guard let self, let image else { return }
-            if !hasOriginalSize {
+            // Always record so the next render of this URL can fix the height up-front.
+            ImageDimensionCache.shared.record(image.size, for: url)
+            if !hasResolvedSize {
                 let ratio = containerWidth / image.size.width
                 self.imageHeightConstraint.constant = image.size.height * ratio
                 self.scheduleCoalescedHeightUpdate()

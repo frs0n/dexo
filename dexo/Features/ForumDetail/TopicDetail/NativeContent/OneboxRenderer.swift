@@ -165,6 +165,10 @@ final class OneboxCardView: UIView {
             let imageH: CGFloat
             if let w = imageWidth, let h = imageHeight, w > 0 {
                 imageH = displayWidth * CGFloat(h) / CGFloat(w)
+            } else if let cached = ImageDimensionCache.shared.size(for: url),
+                      cached.width > 0
+            {
+                imageH = displayWidth * cached.height / cached.width
             } else {
                 imageH = displayWidth * 9.0 / 16.0
             }
@@ -178,8 +182,11 @@ final class OneboxCardView: UIView {
             ])
 
             bodyStack.addArrangedSubview(imageWrapper)
-            imageView.sd_setImage(with: url, placeholderImage: nil, options: [], context: ImageCacheManager.shared.contentContext, progress: nil) { [weak self] _, _, _, _ in
+            imageView.sd_setImage(with: url, placeholderImage: nil, options: [], context: ImageCacheManager.shared.contentContext, progress: nil) { [weak self] image, _, _, _ in
                 self?.imageView.backgroundColor = .clear
+                if let image {
+                    ImageDimensionCache.shared.record(image.size, for: url)
+                }
             }
         }
 

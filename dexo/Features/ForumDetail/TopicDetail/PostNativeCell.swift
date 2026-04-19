@@ -8,6 +8,12 @@ final class PostNativeCell: UITableViewCell {
     static let bottomBarHeight: CGFloat = 30
     private static let symbolConfig = UIImage.SymbolConfiguration(pointSize: 11, weight: .medium)
 
+    // Pre-rendered fallback images so the hot configure / prepareForReuse paths
+    // don't re-allocate them on every cell reuse.
+    private static let heartImage = UIImage(systemName: "heart", withConfiguration: symbolConfig)
+    private static let heartFillImage = UIImage(systemName: "heart.fill", withConfiguration: symbolConfig)
+    private static let boostFallbackImage = UIImage(named: "roket.symbols", in: nil, with: symbolConfig)
+
     /// Pre-rendered OP badge image with rounded corners (cached once).
     private static let opBadgeImage: UIImage = {
         let text = "OP"
@@ -489,7 +495,6 @@ final class PostNativeCell: UITableViewCell {
         configureReactions(post.reactions, count: post.reactionUsersCount, baseURL: baseURL)
 
         // Heart / like button state — driven by actions_summary id==2
-        let symbolConfig = Self.symbolConfig
         let likeAction = post.likeAction
         let liked = likeAction?.acted == true
         let canAct = likeAction?.canAct == true
@@ -502,8 +507,8 @@ final class PostNativeCell: UITableViewCell {
         reactButton.setTitle(nil, for: .normal)
         // Always set the heart symbol — overlay (userReactionImageView) hides
         // it when needed but preserves the button's intrinsic size.
-        let heartName = (liked && !reactionsPluginActive) ? "heart.fill" : "heart"
-        reactButton.setImage(UIImage(systemName: heartName, withConfiguration: symbolConfig), for: .normal)
+        let heartImage = (liked && !reactionsPluginActive) ? Self.heartFillImage : Self.heartImage
+        reactButton.setImage(heartImage, for: .normal)
 
         if reactionsPluginActive, let userReaction = post.currentUserReaction {
             applyUserReactionImage(userReaction.id)
@@ -528,8 +533,7 @@ final class PostNativeCell: UITableViewCell {
         // Boost
         let boostCount = post.boosts.count
         let hasMine = post.boosts.contains { $0.canDelete == true }
-        let boostConfig = Self.symbolConfig
-        boostButton.setImage(UIImage(named: "roket.symbols", in: nil, with: boostConfig), for: .normal)
+        boostButton.setImage(Self.boostFallbackImage, for: .normal)
         boostButton.setTitle(boostCount > 0 ? " \(boostCount)" : nil, for: .normal)
         boostButton.tintColor = hasMine ? .systemYellow : .tertiaryLabel
         // Keep the button tappable when existing boosts are present (e.g. the user has
@@ -837,12 +841,11 @@ final class PostNativeCell: UITableViewCell {
         if !liked, post.likeAction?.canUndo == false { return }
 
         // Optimistic UI — server state will reconcile on next refresh.
-        let config = Self.symbolConfig
         if liked {
-            reactButton.setImage(UIImage(systemName: "heart.fill", withConfiguration: config), for: .normal)
+            reactButton.setImage(Self.heartFillImage, for: .normal)
             reactButton.tintColor = .systemRed
         } else {
-            reactButton.setImage(UIImage(systemName: "heart", withConfiguration: config), for: .normal)
+            reactButton.setImage(Self.heartImage, for: .normal)
             reactButton.tintColor = .tertiaryLabel
         }
 
@@ -1024,14 +1027,13 @@ final class PostNativeCell: UITableViewCell {
         }
         reactionCountLabel.isHidden = true
         validReactions = []
-        let config = Self.symbolConfig
         cancelUserReactionImageLoad()
-        reactButton.setImage(UIImage(systemName: "heart", withConfiguration: config), for: .normal)
+        reactButton.setImage(Self.heartImage, for: .normal)
         reactButton.setTitle(nil, for: .normal)
         reactButton.tintColor = .tertiaryLabel
         reactButton.isEnabled = true
         reactButton.isHidden = false
-        boostButton.setImage(UIImage(named: "roket.symbols", in: nil, with: config), for: .normal)
+        boostButton.setImage(Self.boostFallbackImage, for: .normal)
         boostButton.setTitle(nil, for: .normal)
         boostButton.tintColor = .tertiaryLabel
         boostButton.isHidden = false

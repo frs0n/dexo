@@ -471,17 +471,11 @@ final class PostNativeCell: UITableViewCell {
             userTitleLabel.isHidden = true
         }
 
-        // Flair badge
-        if let flairUrl = post.flairUrl, !flairUrl.isEmpty {
-            let urlString = flairUrl.hasPrefix("http") ? flairUrl : baseURL + flairUrl
-            if let url = URL(string: urlString) {
-                if let bgColor = post.flairBgColor, !bgColor.isEmpty {
-                    flairImageView.backgroundColor = UIColor(hex: bgColor)
-                }
-                flairImageView.sd_setImage(with: url, context: ImageCacheManager.shared.avatarContext)
-                flairImageView.isHidden = false
-            }
-        }
+        // Flair badge intentionally hidden — avatar flair images cost an
+        // extra SDWebImage load per visible cell with no UX value the
+        // readers have asked for. Restore the load branch from git history
+        // (look for `post.flairUrl`) if the policy changes.
+        flairImageView.isHidden = true
 
         if let replyUser = post.replyToUser {
             let attachment = NSTextAttachment()

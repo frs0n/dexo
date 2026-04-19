@@ -109,7 +109,29 @@ final class ImageBrowserController: LightboxController {
 
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handleDismissPan(_:)))
         pan.delegate = self
+        // Single-touch only — keeps two-finger pinch-to-zoom from also firing the dismiss pan.
+        pan.maximumNumberOfTouches = 1
         view.addGestureRecognizer(pan)
+    }
+
+    /// Returns the inner zoom scroll view of the currently visible page, if any.
+    /// Used to suppress the dismiss pan while the image is zoomed in (so the user
+    /// can drag around inside the zoomed image instead of triggering dismissal).
+    private func currentPageZoomScrollView() -> UIScrollView? {
+        guard let paging = pageScrollView else { return nil }
+        let midX = paging.contentOffset.x + paging.bounds.width / 2
+        for page in paging.subviews where page.frame.contains(CGPoint(x: midX, y: page.frame.midY)) {
+            if let sv = findScrollView(in: page) { return sv }
+        }
+        return nil
+    }
+
+    private func findScrollView(in view: UIView) -> UIScrollView? {
+        if let sv = view as? UIScrollView { return sv }
+        for sub in view.subviews {
+            if let sv = findScrollView(in: sub) { return sv }
+        }
+        return nil
     }
 
     @objc private func handleDismissPan(_ gesture: UIPanGestureRecognizer) {
@@ -342,6 +364,11 @@ extension ImageBrowserController: UIGestureRecognizerDelegate {
     /// so horizontal swipes still page through images.
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
+        // While the current page is zoomed in, let the inner scroll view own the
+        // pan so the user can drag the magnified image instead of dismissing.
+        if let zoom = currentPageZoomScrollView(), zoom.zoomScale > zoom.minimumZoomScale + 0.001 {
+            return false
+        }
         let velocity = pan.velocity(in: view)
         // Velocity is more reliable at `.began` than translation (which is still near zero).
         return abs(velocity.y) > abs(velocity.x)

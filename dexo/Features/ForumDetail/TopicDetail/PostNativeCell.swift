@@ -133,7 +133,7 @@ final class PostNativeCell: UITableViewCell {
     private let contentStackView: UIStackView = {
         let sv = UIStackView()
         sv.axis = .vertical
-        sv.spacing = 8
+        sv.spacing = NativeContentRenderer.contentStackSpacing
         sv.translatesAutoresizingMaskIntoConstraints = false
         return sv
     }()

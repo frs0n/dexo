@@ -45,6 +45,11 @@ protocol BlockRenderer {
 // MARK: - NativeContentRenderer
 
 enum NativeContentRenderer {
+    /// Vertical spacing between blocks in `PostNativeCell.contentStackView`.
+    /// Mirror this in any precomputed-height calculator so summed heights
+    /// match the rendered layout.
+    static let contentStackSpacing: CGFloat = 8
+
     static let renderers: [BlockRenderer.Type] = [
         ParagraphRenderer.self,
         HeadingRenderer.self,

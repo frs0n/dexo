@@ -123,14 +123,22 @@ enum BlockHeightCalculator {
         case .spoiler(let blocks):
             return spoilerHeight(blocks: blocks, config: config)
 
+        case .onebox(_, let title, let description, let imageURL, let imageWidth, let imageHeight, _):
+            return oneboxHeight(
+                title: title,
+                description: description,
+                imageURL: imageURL,
+                imageWidth: imageWidth,
+                imageHeight: imageHeight,
+                config: config
+            )
+
         // Block types whose height we can't yet predict accurately:
         // - details: expand toggle changes height; needs explicit invalidation
-        // - onebox: layered chrome we haven't measured precisely yet
         // - table: arbitrarily complex grid layout
         // - poll: needs per-vote runtime data via pollProvider
         // - rawHTML: opaque fallback, not safe to precompute
-        case .onebox,
-             .table,
+        case .table,
              .details,
              .poll,
              .rawHTML:
@@ -333,27 +341,98 @@ enum BlockHeightCalculator {
 
     // MARK: - List
 
-    /// Mirrors `ListRenderer`. Currently only handles the "all flat items"
-    /// fast path that produces a single combined view; lists with nested
-    /// non-paragraph blocks return nil (caller falls back to autosize).
+    /// Mirrors `ListRenderer`. Two paths matching the renderer:
+    /// - All items are paragraph-only → single combined attributed string.
+    /// - Mixed items (some have nested blocks) → per-item itemStack with
+    ///   bullet-or-bullet+text + indented child blocks.
+    /// Returns nil if any nested child block type is itself unsupported.
     private static func listHeight(
         ordered: Bool,
         items: [CookedHTML.ListItem],
         config: NativeRenderConfig
     ) -> CGFloat? {
-        // Match canRenderFlat from ListRenderer.
+        let indent: CGFloat = ordered ? 20 : 12
+
+        // Fast path: matches ListRenderer.renderCombinedFlatList.
         let allFlat = items.allSatisfy { item in
             item.blocks.allSatisfy { block in
                 if case .paragraph = block { return true }
                 return false
             }
         }
-        guard allFlat else { return nil }
+        if allFlat {
+            let combined = NSMutableAttributedString()
+            for (index, item) in items.enumerated() {
+                if index > 0 { combined.append(NSAttributedString(string: "\n")) }
+                var allInlines: [InlineNode] = []
+                for (i, block) in item.blocks.enumerated() {
+                    if case .paragraph(let inlines) = block {
+                        if i > 0 { allInlines.append(.lineBreak) }
+                        allInlines.append(contentsOf: inlines)
+                    }
+                }
+                combined.append(makeListBulletAttributedString(
+                    inlines: allInlines,
+                    ordered: ordered,
+                    index: index,
+                    indent: indent,
+                    config: config
+                ))
+            }
+            return attributedTextHeight(combined, width: config.contentWidth)
+        }
 
-        let indent: CGFloat = ordered ? 20 : 12
-        let combined = NSMutableAttributedString()
+        // Mixed path: each item is its own vertical stack with spacing 4.
+        // Items in the outer stack are also separated by spacing 4.
+        let childConfig = NativeRenderConfig(
+            baseFont: config.baseFont,
+            baseColor: config.baseColor,
+            linkColor: config.linkColor,
+            codeFont: config.codeFont,
+            codeBackgroundColor: config.codeBackgroundColor,
+            contentWidth: config.contentWidth - indent,
+            baseURL: config.baseURL
+        )
+
+        var itemHeights: [CGFloat] = []
         for (index, item) in items.enumerated() {
-            if index > 0 { combined.append(NSAttributedString(string: "\n")) }
+            guard let h = mixedListItemHeight(
+                item: item,
+                ordered: ordered,
+                index: index,
+                indent: indent,
+                config: config,
+                childConfig: childConfig
+            ) else {
+                return nil
+            }
+            itemHeights.append(h)
+        }
+        if itemHeights.isEmpty { return 0 }
+        return itemHeights.reduce(0, +) + CGFloat(itemHeights.count - 1) * Self.listOuterSpacing
+    }
+
+    /// 4pt — matches `itemStack.spacing` and the outer list stack spacing.
+    private static let listOuterSpacing: CGFloat = 4
+    private static let listItemInternalSpacing: CGFloat = 4
+
+    /// Per-item height for the mixed-path list (some non-paragraph blocks).
+    /// Mirrors `ListRenderer.renderItem`'s control flow precisely.
+    private static func mixedListItemHeight(
+        item: CookedHTML.ListItem,
+        ordered: Bool,
+        index: Int,
+        indent: CGFloat,
+        config: NativeRenderConfig,
+        childConfig: NativeRenderConfig
+    ) -> CGFloat? {
+        // If this single item happens to be all-paragraph, the renderer routes
+        // it to renderFlatItem (one combined view) — match that.
+        let allParagraphs = item.blocks.allSatisfy {
+            if case .paragraph = $0 { return true }
+            return false
+        }
+        if allParagraphs {
             var allInlines: [InlineNode] = []
             for (i, block) in item.blocks.enumerated() {
                 if case .paragraph(let inlines) = block {
@@ -361,15 +440,59 @@ enum BlockHeightCalculator {
                     allInlines.append(contentsOf: inlines)
                 }
             }
-            combined.append(makeListBulletAttributedString(
+            let attr = makeListBulletAttributedString(
                 inlines: allInlines,
                 ordered: ordered,
                 index: index,
                 indent: indent,
                 config: config
-            ))
+            )
+            return attributedTextHeight(attr, width: config.contentWidth)
         }
-        return attributedTextHeight(combined, width: config.contentWidth)
+
+        var subviewHeights: [CGFloat] = []
+        var isFirstBlock = true
+        for block in item.blocks {
+            if isFirstBlock, case .paragraph(let inlines) = block {
+                isFirstBlock = false
+                let attr = makeListBulletAttributedString(
+                    inlines: inlines,
+                    ordered: ordered,
+                    index: index,
+                    indent: indent,
+                    config: config
+                )
+                subviewHeights.append(attributedTextHeight(attr, width: config.contentWidth))
+            } else {
+                if isFirstBlock {
+                    isFirstBlock = false
+                    let bullet = makeListBulletAttributedString(
+                        inlines: [],
+                        ordered: ordered,
+                        index: index,
+                        indent: indent,
+                        config: config
+                    )
+                    subviewHeights.append(attributedTextHeight(bullet, width: config.contentWidth))
+                }
+                guard let childH = height(for: block, config: childConfig) else { return nil }
+                subviewHeights.append(childH)
+            }
+        }
+
+        // Edge case: item.blocks empty → just a bullet.
+        if isFirstBlock {
+            let bullet = makeListBulletAttributedString(
+                inlines: [],
+                ordered: ordered,
+                index: index,
+                indent: indent,
+                config: config
+            )
+            subviewHeights.append(attributedTextHeight(bullet, width: config.contentWidth))
+        }
+
+        return subviewHeights.reduce(0, +) + CGFloat(max(0, subviewHeights.count - 1)) * Self.listItemInternalSpacing
     }
 
     /// Mirrors `ListRenderer.makeBulletedAttributedString` so the height
@@ -409,6 +532,71 @@ enum BlockHeightCalculator {
         return result
     }
 
+    // MARK: - Onebox
+
+    /// Mirrors `OneboxCardView`. Three vertical sections:
+    /// 1. Header — favicon + domain + 1px separator. Fixed-ish height (~33pt
+    ///    when favicon present; we use 33 unconditionally as a safe upper bound).
+    /// 2. Text stack — optional title (font 14, max 2 lines) + optional
+    ///    description (font 13, max 3 lines), with 10pt top + bottom margins.
+    /// 3. Optional image wrapper — full-width image with 12pt bottom inset.
+    private static func oneboxHeight(
+        title: String?,
+        description: String?,
+        imageURL: String?,
+        imageWidth: Int?,
+        imageHeight: Int?,
+        config: NativeRenderConfig
+    ) -> CGFloat {
+        let containerWidth = config.contentWidth
+
+        // Header height: 8 (top) + 16 (favicon-or-line-height max) + 8 (bottom) + 1 (separator)
+        let headerH = Self.oneboxHeaderHeight
+
+        // Text stack: 10 + items + 10 (margins). Items have 4pt spacing between them.
+        let textWidth = containerWidth - 24
+        var textItems: [CGFloat] = []
+        if let title, !title.isEmpty {
+            let font = FontManager.shared.font(size: 14, weight: .medium)
+            textItems.append(cappedTextHeight(text: title, font: font, width: textWidth, maxLines: 2))
+        }
+        if let description, !description.isEmpty {
+            let font = FontManager.shared.font(size: 13)
+            textItems.append(cappedTextHeight(text: description, font: font, width: textWidth, maxLines: 3))
+        }
+        let textItemsTotal = textItems.reduce(0, +)
+            + CGFloat(max(0, textItems.count - 1)) * Self.oneboxTextSpacing
+        let textStackH = Self.oneboxTextVerticalMargins + textItemsTotal
+
+        // Optional image wrapper.
+        var imageBlockH: CGFloat = 0
+        if let imageURL, let url = URL(string: imageURL) {
+            let displayWidth = containerWidth - 24
+            let imageH: CGFloat
+            if let w = imageWidth, let h = imageHeight, w > 0 {
+                imageH = displayWidth * CGFloat(h) / CGFloat(w)
+            } else if let cached = ImageDimensionCache.shared.size(for: url),
+                      cached.width > 0
+            {
+                imageH = displayWidth * cached.height / cached.width
+            } else {
+                imageH = displayWidth * 9.0 / 16.0
+            }
+            imageBlockH = imageH + Self.oneboxImageBottomInset
+        }
+
+        return headerH + textStackH + imageBlockH
+    }
+
+    /// 8 (top) + 16 (favicon / domain line) + 8 (bottom) + 1 (separator)
+    private static let oneboxHeaderHeight: CGFloat = 33
+    /// 10 (top margin) + 10 (bottom margin)
+    private static let oneboxTextVerticalMargins: CGFloat = 20
+    /// `textStack.spacing` between title and description
+    private static let oneboxTextSpacing: CGFloat = 4
+    /// imageView pinned to wrapper top with 0 inset and bottom with -12 inset
+    private static let oneboxImageBottomInset: CGFloat = 12
+
     // MARK: - Spoiler
 
     /// Mirrors `SpoilerBlockView` — wraps an inner stack (spacing 8) inside a
@@ -440,5 +628,21 @@ enum BlockHeightCalculator {
             context: nil
         )
         return ceil(bounds.height)
+    }
+
+    /// Plain-text height capped at `maxLines × lineHeight` to mirror UILabel's
+    /// `numberOfLines` truncation. Used by onebox and other renderers that
+    /// clamp line count.
+    private static func cappedTextHeight(
+        text: String,
+        font: UIFont,
+        width: CGFloat,
+        maxLines: Int
+    ) -> CGFloat {
+        let attr = NSAttributedString(string: text, attributes: [.font: font])
+        let natural = attributedTextHeight(attr, width: width)
+        if maxLines <= 0 { return natural }
+        let cap = ceil(font.lineHeight * CGFloat(maxLines))
+        return min(natural, cap)
     }
 }

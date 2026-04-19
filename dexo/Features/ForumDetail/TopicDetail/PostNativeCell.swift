@@ -76,14 +76,24 @@ final class PostNativeCell: UITableViewCell {
         return iv
     }()
 
-    private let flairImageView: UIImageView = {
-        let iv = UIImageView()
+    private let flairImageView: SDAnimatedImageView = {
+        let iv = SDAnimatedImageView()
         iv.contentMode = .scaleAspectFill
         iv.clipsToBounds = true
         iv.layer.borderWidth = 1
         iv.layer.borderColor = UIColor.systemBackground.cgColor
         iv.translatesAutoresizingMaskIntoConstraints = false
         iv.isHidden = true
+        iv.autoPlayAnimatedImage = true
+        // Bound the per-view animation buffer so a 512×512 multi-frame flair
+        // can't pin its full decoded set in RAM. SDAnimatedImage decodes
+        // frames lazily; with a small cap it keeps only the active + a
+        // couple buffered frames and re-decodes the rest on demand. CPU
+        // hit is negligible for a 14pt badge; memory stays bounded
+        // regardless of source resolution.
+        iv.maxBufferSize = 1 * 1024 * 1024
+        // Free the decoded buffer when offscreen / cell is reused.
+        iv.clearBufferWhenStopped = true
         return iv
     }()
 
@@ -471,28 +481,21 @@ final class PostNativeCell: UITableViewCell {
             userTitleLabel.isHidden = true
         }
 
-        // Flair badge — loaded as a single static frame regardless of source
-        // format. Some users upload 512×512 animated GIFs as flair (one
-        // observed example was 2.8 MiB decoded), and at the ~14pt badge
-        // size animation isn't perceivable anyway. `.decodeFirstFrameOnly`
-        // skips the multi-frame decode; `imageThumbnailPixelSize` further
-        // downsamples to the actual display resolution before caching, so
-        // each flair lands in `avatarCache` as a few KiB instead of MiBs.
+        // Flair badge — animated when the source is GIF / WebP. We let
+        // SDWebImage do its native multi-frame decode (no
+        // `imageThumbnailPixelSize`, which collapses animated decodes to a
+        // single frame in this version). Memory is bounded at the view
+        // level via `maxBufferSize` + `clearBufferWhenStopped` on the
+        // SDAnimatedImageView declaration above — the source GIF stays in
+        // `avatarCache` (~few MiB) but the decoded-frame working set per
+        // cell is capped to ~1 MiB regardless of source resolution.
         if let flairUrl = post.flairUrl, !flairUrl.isEmpty {
             let urlString = flairUrl.hasPrefix("http") ? flairUrl : baseURL + flairUrl
             if let url = URL(string: urlString) {
                 if let bgColor = post.flairBgColor, !bgColor.isEmpty {
                     flairImageView.backgroundColor = UIColor(hex: bgColor)
                 }
-                var context = ImageCacheManager.shared.avatarContext
-                let pixelSide = flairSize * UIScreen.main.scale
-                context[.imageThumbnailPixelSize] = NSValue(cgSize: CGSize(width: pixelSide, height: pixelSide))
-                flairImageView.sd_setImage(
-                    with: url,
-                    placeholderImage: nil,
-                    options: [.decodeFirstFrameOnly],
-                    context: context
-                )
+                flairImageView.sd_setImage(with: url, context: ImageCacheManager.shared.avatarContext)
                 flairImageView.isHidden = false
             }
         }

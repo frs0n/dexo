@@ -410,6 +410,7 @@ final class PostNativeCell: UITableViewCell {
         validReactions: [String],
         isBoostsExpanded: Bool,
         showsSeparator: Bool,
+        precomputedBlockHeights: [CGFloat]? = nil,
     ) {
         let fm = FontManager.shared
         let avatarSize = fm.scaled(Self.baseAvatarSize)
@@ -573,11 +574,17 @@ final class PostNativeCell: UITableViewCell {
             contentStackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
             let t1 = CACurrentMediaTime()
 
-            let views = NativeContentRenderer.renderBlocks(annotatedBlocks, config: config, delegate: delegate) { name in
-                guard let poll = post.polls.first(where: { $0.name == name }) else { return nil }
-                let voted = Set(post.pollsVotes[name] ?? [])
-                return (poll, voted, post)
-            }
+            let views = NativeContentRenderer.renderBlocks(
+                annotatedBlocks,
+                config: config,
+                delegate: delegate,
+                pollProvider: { name in
+                    guard let poll = post.polls.first(where: { $0.name == name }) else { return nil }
+                    let voted = Set(post.pollsVotes[name] ?? [])
+                    return (poll, voted, post)
+                },
+                precomputedBlockHeights: precomputedBlockHeights
+            )
             let t2 = CACurrentMediaTime()
 
             var allTextViews: [UITextView] = []

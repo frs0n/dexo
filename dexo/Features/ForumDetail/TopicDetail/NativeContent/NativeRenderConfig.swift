@@ -79,7 +79,8 @@ enum NativeContentRenderer {
         _ annotatedBlocks: [AnnotatedBlock],
         config: NativeRenderConfig,
         delegate: PostCellDelegate?,
-        pollProvider: ((String) -> (poll: DiscourseTopicDetail.Poll, votedOptionIds: Set<String>, post: DiscourseTopicDetail.Post)?)? = nil
+        pollProvider: ((String) -> (poll: DiscourseTopicDetail.Poll, votedOptionIds: Set<String>, post: DiscourseTopicDetail.Post)?)? = nil,
+        precomputedBlockHeights: [CGFloat]? = nil
     ) -> [UIView] {
         _ = annotatedBlocks.map { annotated -> ContentBlock? in
             if case .poll(_) = annotated.block, pollProvider != nil {
@@ -152,6 +153,22 @@ enum NativeContentRenderer {
             }
             i += 1
         }
+
+        // Pin each block view to its precomputed height. Lets PostNativeCell
+        // skip the systemLayoutSizeFitting → Core Text typesetting cascade
+        // when measuring the cell — the contentStackView sums known heights
+        // instead of asking each label/textView for its intrinsic content size.
+        //
+        // Length must match the view sequence (paragraph merging considered).
+        // Mismatched lengths fall through to autosizing rather than crash.
+        if let heights = precomputedBlockHeights, heights.count == views.count {
+            for (view, h) in zip(views, heights) {
+                let c = view.heightAnchor.constraint(equalToConstant: h)
+                c.priority = .required
+                c.isActive = true
+            }
+        }
+
         return views
     }
 

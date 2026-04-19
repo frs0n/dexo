@@ -720,7 +720,14 @@ final class PostNativeCell: UITableViewCell {
 
     // MARK: - Inline Image Loading
 
-    private final class InlineImageEntry {
+    /// Held briefly while batching inline-image loads. Explicitly `nonisolated`
+    /// to opt out of the project-wide default `@MainActor` isolation — the
+    /// back-deployed Swift Concurrency runtime (used because deployment target
+    /// is < iOS 17) crashes inside `swift_task_deinitOnExecutorMainActorBackDeploy`
+    /// → `TaskLocal::StopLookupScope::~StopLookupScope` when actor-isolated
+    /// classes are deinitted in this code path. A pure-data holder doesn't
+    /// need actor isolation anyway.
+    private nonisolated final class InlineImageEntry {
         let attachment: NSTextAttachment
         let location: Int
         weak var textView: UITextView?

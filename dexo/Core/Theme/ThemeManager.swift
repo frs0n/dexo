@@ -191,6 +191,7 @@ final class ThemeManager {
 
     /// Accent / tint color that adapts to light/dark mode
     var accentColor: UIColor {
+        _ = revision
         if let c = _accentColor { return c }
         let theme = currentTheme
         let color = dynamicColor(light: theme.lightAccentHex, dark: theme.darkAccentHex)
@@ -200,6 +201,7 @@ final class ThemeManager {
 
     /// Page background (replaces systemGroupedBackground)
     var backgroundColor: UIColor {
+        _ = revision
         if let c = _backgroundColor { return c }
         let theme = currentTheme
         let color = dynamicColor(light: theme.lightBackgroundHex, dark: theme.darkBackgroundHex)
@@ -209,6 +211,7 @@ final class ThemeManager {
 
     /// Card / cell background (replaces secondarySystemGroupedBackground)
     var cardBackgroundColor: UIColor {
+        _ = revision
         if let c = _cardBackgroundColor { return c }
         let theme = currentTheme
         let color = dynamicColor(light: theme.lightCardBackgroundHex, dark: theme.darkCardBackgroundHex)
@@ -218,6 +221,7 @@ final class ThemeManager {
 
     /// Code block / quote background — accent at very low opacity over card background
     var codeBackgroundColor: UIColor {
+        _ = revision
         if let c = _codeBackgroundColor { return c }
         // Capture the cached accent/card UIColors so the trait-resolved closure
         // doesn't bounce back through ThemeManager getters on every resolve.
@@ -234,6 +238,7 @@ final class ThemeManager {
 
     /// Blockquote / quote left bar — accent at medium opacity
     var quoteBarColor: UIColor {
+        _ = revision
         if let c = _quoteBarColor { return c }
         let color = accentColor.withAlphaComponent(0.4)
         _quoteBarColor = color
@@ -258,6 +263,7 @@ final class ThemeManager {
 
     func selectTheme(id: String) {
         settings.selectedThemeId = id
+        invalidateAllCaches()
         revision += 1
         applyToAllWindows()
         NotificationCenter.default.post(name: Self.themeDidChangeNotification, object: nil)
@@ -265,9 +271,19 @@ final class ThemeManager {
 
     /// Call after modifying custom color properties on AppSettings.
     func notifyChange() {
+        invalidateAllCaches()
         revision += 1
         applyToAllWindows()
         NotificationCenter.default.post(name: Self.themeDidChangeNotification, object: nil)
+    }
+
+    /// Color getters short-circuit on their cached UIColor before reading
+    /// `currentTheme`, so we must drop both the theme and color caches eagerly
+    /// here — lazy invalidation inside `currentTheme` would never fire.
+    private func invalidateAllCaches() {
+        _cachedTheme = nil
+        _cachedThemeRevision = -1
+        invalidateColorCaches()
     }
 
     // MARK: - Helpers

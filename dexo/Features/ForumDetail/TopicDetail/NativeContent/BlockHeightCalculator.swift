@@ -256,8 +256,12 @@ enum BlockHeightCalculator {
 
     /// Mirrors `BlockquoteRenderer`. Inner content uses spacing 6, width
     /// reduced by 15 (3 bar + 12 gap to content); outer container has 4pt
-    /// top + 4pt bottom padding.
+    /// top + 4pt bottom padding. Callouts (`> [!warning]` etc.) take a
+    /// different layout path.
     private static func blockquoteHeight(inner: [ContentBlock], config: NativeRenderConfig) -> CGFloat? {
+        if let parsed = BlockquoteRenderer.parseCallout(inner) {
+            return calloutHeight(parsed: parsed, config: config)
+        }
         let innerConfig = NativeRenderConfig(
             baseFont: config.baseFont,
             baseColor: .secondaryLabel,
@@ -269,6 +273,27 @@ enum BlockHeightCalculator {
         )
         guard let innerH = nestedStackHeight(for: inner, config: innerConfig, spacing: 6) else { return nil }
         return innerH + Self.blockquoteVerticalPadding
+    }
+
+    private static func calloutHeight(parsed: BlockquoteRenderer.ParsedCallout, config: NativeRenderConfig) -> CGFloat? {
+        let contentConfig = NativeRenderConfig(
+            baseFont: config.baseFont,
+            baseColor: config.baseColor,
+            linkColor: config.linkColor,
+            codeFont: config.codeFont,
+            codeBackgroundColor: config.codeBackgroundColor,
+            contentWidth: config.contentWidth - BlockquoteRenderer.calloutHorizontalPadding * 2,
+            baseURL: config.baseURL
+        )
+        guard let innerH = nestedStackHeight(
+            for: parsed.blocks,
+            config: contentConfig,
+            spacing: BlockquoteRenderer.calloutContentSpacing
+        ) else { return nil }
+        return BlockquoteRenderer.calloutTitleHeight
+            + BlockquoteRenderer.calloutTitleContentGap
+            + innerH
+            + BlockquoteRenderer.calloutVerticalPadding
     }
 
     /// 4 (top) + 4 (bottom)

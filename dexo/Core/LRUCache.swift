@@ -27,6 +27,10 @@ final class LRUCache<Key: Hashable, Value> {
         self.capacity = capacity
     }
 
+    // Explicit deinit works around a Swift 6.3 SIL EarlyPerfInliner crash
+    // on the synthesized deinit of this generic class under -O WMO (Xcode Cloud archive).
+    deinit {}
+
     subscript(key: Key) -> Value? {
         get {
             guard let value = storage[key] else { return nil }

@@ -46,8 +46,8 @@ final class DiscourseAPI {
         try await request(route: .categories)
     }
 
-    func fetchCategoryTopics(slug: String, id: Int, page: Int = 0) async throws -> DiscourseTopicList {
-        try await request(route: .categoryTopics(slug: slug, id: id, page: page))
+    func fetchCategoryTopics(slug: String, id: Int, sort: String? = nil, page: Int = 0) async throws -> DiscourseTopicList {
+        try await request(route: .categoryTopics(slug: slug, id: id, sort: sort, page: page))
     }
 
     func fetchTagTopics(name: String, page: Int = 0) async throws -> DiscourseTopicList {

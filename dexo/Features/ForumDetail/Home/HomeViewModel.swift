@@ -1,6 +1,6 @@
 import Foundation
 
-enum HomeListMode {
+enum HomeListMode: String {
     case latest
     case hot
     case top
@@ -57,7 +57,7 @@ final class HomeViewModel {
             async let categoriesResult: Void = loadCategoriesIfNeeded()
             let result: DiscourseTopicList
             if let cat = selectedCategory() {
-                result = try await api.fetchCategoryTopics(slug: cat.slug, id: cat.id, page: 0)
+                result = try await api.fetchCategoryTopics(slug: cat.slug, id: cat.id, sort: listMode.rawValue, page: 0)
             } else {
                 switch listMode {
                 case .latest:
@@ -89,7 +89,7 @@ final class HomeViewModel {
         do {
             let result: DiscourseTopicList
             if let cat = selectedCategory() {
-                result = try await api.fetchCategoryTopics(slug: cat.slug, id: cat.id, page: nextPage)
+                result = try await api.fetchCategoryTopics(slug: cat.slug, id: cat.id, sort: listMode.rawValue, page: nextPage)
             } else {
                 switch listMode {
                 case .latest:

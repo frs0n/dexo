@@ -14,7 +14,7 @@ enum DiscourseRouter {
     case createTopic
     case createBoost(postId: Int)
     case postReplies(postId: Int)
-    case categoryTopics(slug: String, id: Int, page: Int)
+    case categoryTopics(slug: String, id: Int, sort: String?, page: Int)
     case tagTopics(name: String, page: Int)
     case siteInfo
     case basicInfo
@@ -95,7 +95,10 @@ enum DiscourseRouter {
             return "/discourse-boosts/posts/\(postId)/boosts"
         case .postReplies(let postId):
             return "/posts/\(postId)/replies.json"
-        case .categoryTopics(let slug, let id, let page):
+        case .categoryTopics(let slug, let id, let sort, let page):
+            if let sort, !sort.isEmpty {
+                return "/c/\(slug)/\(id)/l/\(sort).json?page=\(page)"
+            }
             return "/c/\(slug)/\(id).json?page=\(page)"
         case .tagTopics(let name, let page):
             return "/tag/\(name).json?page=\(page)"

@@ -98,7 +98,8 @@ final class NotificationPoller {
     /// First poll: fetch current user for initial unread state + user ID,
     /// then seed MessageBus channel positions with -1.
     private func seedInitialState() async {
-        if let user = try? await api.fetchCurrentUser() {
+        // linux.do's /session/current.json returns empty, so skip it entirely there.
+        if !api.isLinuxDo, let user = try? await api.fetchCurrentUser() {
             userId = user.id
             // Apply initial unread state from session
             let total = (user.unreadNotifications ?? 0) + (user.unreadHighPriorityNotifications ?? 0)

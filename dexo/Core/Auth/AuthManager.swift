@@ -192,13 +192,16 @@ final class AuthManager: @unchecked Sendable {
     // MARK: - Username Fetching
 
     /// Fetches the current user's username via `/session/current.json`, falling back to `/notifications.json`.
+    /// For linux.do, skip `/session/current.json` and go straight to `/notifications.json`.
     private func fetchAndCacheUsername(baseURL: String, forum: ForumInstance) async {
         let api = DiscourseAPI(baseURL: baseURL)
         var username: String?
 
-        // Primary: /session/current.json
-        if let currentUser = try? await api.fetchCurrentUser() {
-            username = currentUser.username
+        if !api.isLinuxDo {
+            // Primary: /session/current.json
+            if let currentUser = try? await api.fetchCurrentUser() {
+                username = currentUser.username
+            }
         }
 
         // Fallback: extract from /notifications.json pagination URL

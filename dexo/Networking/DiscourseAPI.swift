@@ -21,6 +21,12 @@ final class DiscourseAPI {
         self.interceptor = DiscourseAuthInterceptor(baseURL: self.baseURL)
     }
 
+    /// linux.do's `/session/current.json` returns an empty body, so callers must skip it
+    /// and derive the username from `/notifications.json` instead.
+    var isLinuxDo: Bool {
+        URL(string: baseURL)?.host?.lowercased() == "linux.do"
+    }
+
     private static func makeSession(interceptor: DiscourseAuthInterceptor) -> Session {
         let config = URLSessionConfiguration.af.default
         config.httpCookieAcceptPolicy = .never
@@ -458,6 +464,10 @@ final class DiscourseAPI {
         let response = await session.request(url, method: route.method, parameters: parameters, encoding: resolvedEncoding, headers: headers)
             .serializingDecodable(T.self)
             .response
+
+        if let data = response.data, let body = String(data: data, encoding: .utf8) {
+            debugLog("[DiscourseAPI] \(route.method.rawValue) \(url)\n\(body)")
+        }
 
         if let newToken = response.response?.value(forHTTPHeaderField: "X-CSRF-Token") {
             interceptor.updateCSRFToken(newToken)

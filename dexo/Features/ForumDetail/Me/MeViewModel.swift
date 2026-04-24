@@ -29,11 +29,20 @@ final class MeViewModel {
             let username: String
             if let cached = AuthManager.shared.username(for: api.baseURL) {
                 username = cached
+            } else if api.isLinuxDo {
+                // linux.do's /session/current.json returns empty; use notifications instead.
+                let notifList = try await api.fetchNotifications()
+                guard let resolved = notifList.username else {
+                    throw DiscourseAPIError(messages: ["Unable to resolve username"], errorType: "not_logged_in")
+                }
+                username = resolved
+                AuthManager.shared.setCachedUsername(username, for: api.baseURL)
             } else {
                 let current = try await api.fetchCurrentUser()
                 username = current.username
                 AuthManager.shared.setCachedUsername(username, for: api.baseURL)
             }
+
             let profile = try await api.fetchUserProfile(username: username)
             let userSummary = try? await api.fetchUserSummary(username: username)
             currentUser = DiscourseCurrentUser(

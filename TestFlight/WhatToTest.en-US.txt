@@ -1,18 +1,5 @@
 What to Test
 
-- Separated image cache into avatar/emoji/content with independent clearing
-- Long press on post to view raw markdown source
-- Reply composer now has full markdown toolbar and image upload
-- Long press topic cell for preview (Context Menu)
-- Image viewer zoom transition animation
-- Boost danmaku plays after sending a boost
-- Theme switches apply immediately with the selected row checkmark in sync
-- Spoiler blur reveal / re-hide is more reliable; wrapped inline spoilers align at the line edge
-- Code blocks size to content instead of scrolling short snippets
-- Markdown callout panels in blockquotes (note / tip / warning / danger etc., 13 kinds total)
-- Latest / Hot / Top tabs now route correctly inside a category
-- VoiceOver labels on the forum minimize and category filter nav buttons
-- Fixed number-type polls where options failed to render
 - Topic titles now decode HTML entities like `&amp;` / `&quot;` correctly
 - Native `<video>` embeds and custom callout titles render properly
-- Fewer redundant requests after login on linux.do
+- Fewer redundant requests after login

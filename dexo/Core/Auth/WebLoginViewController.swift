@@ -86,7 +86,6 @@ final class WebLoginViewController: BaseViewController {
             self?.progressView.isHidden = wv.estimatedProgress >= 1.0
         }
 
-        coordinator.attach(to: webView.configuration.websiteDataStore)
         webView.load(URLRequest(url: targetURL))
     }
 
@@ -97,7 +96,7 @@ final class WebLoginViewController: BaseViewController {
     }
 
     @objc private func doneTapped() {
-        coordinator.collectAndFireIfPossible(from: webView, force: true)
+        coordinator.collectAndFire(from: webView)
     }
 
     private func handleCookiesReady(_ cookies: [HTTPCookie]) {
@@ -155,7 +154,7 @@ final class WebLoginViewController: BaseViewController {
 
     // MARK: - Coordinator
 
-    private final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKHTTPCookieStoreObserver {
+    private final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         private let targetHost: String
         private let onCookiesReady: ([HTTPCookie]) -> Void
         private(set) var didCallback = false
@@ -165,43 +164,23 @@ final class WebLoginViewController: BaseViewController {
             self.onCookiesReady = onCookiesReady
         }
 
-        func attach(to dataStore: WKWebsiteDataStore) {
-            dataStore.httpCookieStore.add(self)
-        }
-
         func webView(_ webView: WKWebView, didReceive challenge: URLAuthenticationChallenge,
                      completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void)
         {
             completionHandler(.performDefaultHandling, nil)
         }
 
-        func collectAndFireIfPossible(from webView: WKWebView, force: Bool = false) {
+        /// Collect cookies and fire the callback. Only invoked from the "Done" button tap —
+        /// auto-dismiss on navigation finish / cookie change was intentionally removed so
+        /// the user decides when to hand off to the app.
+        func collectAndFire(from webView: WKWebView) {
             guard !didCallback else { return }
             webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
                 guard let self, !self.didCallback else { return }
                 let relevant = cookies.filter { $0.domain.contains(self.targetHost) }
-                let hasSession = relevant.contains { $0.name == "_t" }
-                guard hasSession || force else { return }
                 self.didCallback = true
                 DispatchQueue.main.async { self.onCookiesReady(relevant) }
             }
-        }
-
-        nonisolated func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                let cookies = await cookieStore.allCookies()
-                guard !self.didCallback else { return }
-                let relevant = cookies.filter { $0.domain.contains(self.targetHost) }
-                let hasSession = relevant.contains { $0.name == "_t" }
-                guard hasSession else { return }
-                self.didCallback = true
-                DispatchQueue.main.async { self.onCookiesReady(relevant) }
-            }
-        }
-
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            collectAndFireIfPossible(from: webView)
         }
 
         func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,

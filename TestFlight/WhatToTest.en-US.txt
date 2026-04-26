@@ -1,6 +1,4 @@
 What to Test
 
-- New "Read" entry on the profile page lists topics you've already read
-- Read time now syncs to the server so the Read list and unread state update correctly
-- Composer tag suggestions are now a horizontal chip strip with a Done button — no longer covers the body
-- l: like button hidden, read-tracking opt-out
+- Forum list now supports manual reordering — tap "Edit" on the top left, then drag the right-edge grabber to reorder. Order is persisted across launches
+- Fix poll voting not refreshing the UI: selected option and updated tally now appear immediately after voting (single or multiple choice)

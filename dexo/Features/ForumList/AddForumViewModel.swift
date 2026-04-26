@@ -39,6 +39,7 @@ final class AddForumViewModel {
                 baseURL: normalized,
                 iconURL: resolveIconURL(base: normalized, info: info)
             )
+            forum.sortOrder = (try? DatabaseManager.shared.nextForumSortOrder()) ?? 0
             try DatabaseManager.shared.saveForum(&forum)
             isLoading = false
             return true

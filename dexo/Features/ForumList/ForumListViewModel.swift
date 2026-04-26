@@ -30,4 +30,20 @@ final class ForumListViewModel {
             errorMessage = error.localizedDescription
         }
     }
+
+    func moveForum(from sourceIndex: Int, to destinationIndex: Int) {
+        guard sourceIndex != destinationIndex,
+              sourceIndex >= 0, sourceIndex < forums.count,
+              destinationIndex >= 0, destinationIndex < forums.count else { return }
+        let moved = forums.remove(at: sourceIndex)
+        forums.insert(moved, at: destinationIndex)
+        for i in forums.indices {
+            forums[i].sortOrder = i
+        }
+        do {
+            try DatabaseManager.shared.updateForumOrder(forums)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
 }

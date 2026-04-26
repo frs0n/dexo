@@ -69,4 +69,21 @@ final class DatabaseManager: Sendable {
             _ = try forum.delete(db)
         }
     }
+
+    func nextForumSortOrder() throws -> Int {
+        try dbPool.read { db in
+            let max = try Int.fetchOne(db, sql: "SELECT MAX(sortOrder) FROM forumInstance") ?? -1
+            return max + 1
+        }
+    }
+
+    func updateForumOrder(_ forums: [ForumInstance]) throws {
+        try dbPool.write { db in
+            for (index, forum) in forums.enumerated() {
+                var updated = forum
+                updated.sortOrder = index
+                try updated.update(db)
+            }
+        }
+    }
 }

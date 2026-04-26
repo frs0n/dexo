@@ -1617,8 +1617,14 @@ extension TopicDetailViewController: PostCellDelegate {
 
     private func reconfigurePost(_ postId: Int) {
         invalidatePrecomputedHeights(forPostId: postId)
-        var snapshot = dataSource.snapshot()
+        contentViewCache.removeValue(forKey: postId)
         let item = TopicDetailItem.post(postId)
+        if let indexPath = dataSource.indexPath(for: item),
+           let cell = tableView.cellForRow(at: indexPath) as? PostNativeCell
+        {
+            cell.markContentDirty()
+        }
+        var snapshot = dataSource.snapshot()
         if snapshot.itemIdentifiers.contains(item) {
             snapshot.reconfigureItems([item])
             dataSource.apply(snapshot, animatingDifferences: false)

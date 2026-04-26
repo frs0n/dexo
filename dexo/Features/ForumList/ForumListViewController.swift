@@ -15,8 +15,8 @@ final class ForumListViewController: ObservableViewController {
         return tv
     }()
 
-    private lazy var dataSource: UITableViewDiffableDataSource<Int, Int64> = {
-        UITableViewDiffableDataSource<Int, Int64>(tableView: tableView) { [weak self] tableView, indexPath, forumId in
+    private lazy var dataSource: ReorderableDataSource = {
+        let ds = ReorderableDataSource(tableView: tableView) { [weak self] tableView, indexPath, forumId in
             guard let self,
                   let cell = tableView.dequeueReusableCell(withIdentifier: ForumListCell.reuseIdentifier, for: indexPath) as? ForumListCell,
                   let forum = self.viewModel.forums.first(where: { $0.id == forumId }) else {
@@ -25,6 +25,10 @@ final class ForumListViewController: ObservableViewController {
             cell.configure(with: forum)
             return cell
         }
+        ds.onMove = { [weak self] from, to in
+            self?.viewModel.moveForum(from: from.row, to: to.row)
+        }
+        return ds
     }()
 
     override func viewDidLoad() {
@@ -35,6 +39,7 @@ final class ForumListViewController: ObservableViewController {
             target: self,
             action: #selector(addForumTapped)
         )
+        navigationItem.leftBarButtonItem = editButtonItem
 
         view.addSubview(tableView)
         NSLayoutConstraint.activate([
@@ -64,6 +69,11 @@ final class ForumListViewController: ObservableViewController {
         let ids = viewModel.forums.compactMap(\.id)
         snapshot.appendItems(ids, toSection: 0)
         dataSource.apply(snapshot, animatingDifferences: true)
+    }
+
+    override func setEditing(_ editing: Bool, animated: Bool) {
+        super.setEditing(editing, animated: animated)
+        tableView.setEditing(editing, animated: animated)
     }
 
     @objc private func addForumTapped() {
@@ -112,5 +122,43 @@ extension ForumListViewController: UITableViewDelegate {
             completion(true)
         }
         return UISwipeActionsConfiguration(actions: [deleteAction])
+    }
+
+    func tableView(_ tableView: UITableView, editingStyleForRowAt indexPath: IndexPath) -> UITableViewCell.EditingStyle {
+        .none
+    }
+
+    func tableView(_ tableView: UITableView, shouldIndentWhileEditingRowAt indexPath: IndexPath) -> Bool {
+        false
+    }
+}
+
+// MARK: - Reorderable diffable data source
+
+private final class ReorderableDataSource: UITableViewDiffableDataSource<Int, Int64> {
+    var onMove: ((IndexPath, IndexPath) -> Void)?
+
+    override func tableView(_ tableView: UITableView, canMoveRowAt indexPath: IndexPath) -> Bool {
+        true
+    }
+
+    override func tableView(_ tableView: UITableView, moveRowAt sourceIndexPath: IndexPath, to destinationIndexPath: IndexPath) {
+        // Sync the data source's snapshot with the move the table view just animated.
+        // Without this, the next `apply(...)` (e.g. from observation tracking after
+        // the model mutates) diffs against a stale snapshot and re-animates the row,
+        // which produces the "drop position doesn't stick" behaviour.
+        var snap = snapshot()
+        let items = snap.itemIdentifiers(inSection: 0)
+        guard sourceIndexPath.row < items.count else { return }
+        let moved = items[sourceIndexPath.row]
+        snap.deleteItems([moved])
+        let remaining = snap.itemIdentifiers(inSection: 0)
+        if destinationIndexPath.row >= remaining.count {
+            snap.appendItems([moved], toSection: 0)
+        } else {
+            snap.insertItems([moved], beforeItem: remaining[destinationIndexPath.row])
+        }
+        apply(snap, animatingDifferences: false)
+        onMove?(sourceIndexPath, destinationIndexPath)
     }
 }

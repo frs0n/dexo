@@ -416,6 +416,14 @@ final class PostNativeCell: UITableViewCell {
         contentStackView.arrangedSubviews
     }
 
+    /// Force the next `configure(...)` call to skip the Tier 1 / Tier 2 reuse paths
+    /// and rebuild the content stack from scratch. Needed when the underlying post
+    /// data has changed in a way that stateful renderers (poll, details) hold
+    /// internally and won't pick up via simple reparenting.
+    func markContentDirty() {
+        renderedContentPostId = 0
+    }
+
     func configure(
         with post: DiscourseTopicDetail.Post,
         annotatedBlocks: [AnnotatedBlock],

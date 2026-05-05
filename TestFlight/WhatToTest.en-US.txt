@@ -1,4 +1,4 @@
 What to Test
 
-- Forum list now supports manual reordering — tap "Edit" on the top left, then drag the right-edge grabber to reorder. Order is persisted across launches
-- Fix poll voting not refreshing the UI: selected option and updated tally now appear immediately after voting (single or multiple choice)
+- The Latest / Hot / Top switcher on the forum home moved from the top pill into the right-side navigation bar menu, freeing up vertical space for the topic list
+- Pinned topics now render as a compact row in the topic list — pin icon and title only — so they're easier to scroll past

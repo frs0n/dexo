@@ -5,13 +5,17 @@ final class HomeViewController: ObservableViewController {
     private let viewModel: HomeViewModel
     private weak var authGate: AuthGating?
 
-    private let segmentedControl: UISegmentedControl = {
-        let sc = UISegmentedControl(items: [String(localized: "home.latest"), String(localized: "home.hot"), String(localized: "home.top")])
-        sc.selectedSegmentIndex = 0
-        sc.backgroundColor = UIColor.clear
-        sc.translatesAutoresizingMaskIntoConstraints = false
-        return sc
+    private lazy var sortBarButton: UIBarButtonItem = {
+        let item = UIBarButtonItem(
+            image: UIImage(systemName: "arrow.up.arrow.down"),
+            menu: nil
+        )
+        item.accessibilityLabel = String(localized: "home.sort.accessibility.label")
+        return item
     }()
+
+    /// Right bar button items injected by the container (e.g. minimize button), captured before we add our own.
+    private var inheritedRightBarItems: [UIBarButtonItem] = []
 
     private let categoryButton: UIButton = {
         var config = UIButton.Configuration.plain()
@@ -33,6 +37,7 @@ final class HomeViewController: ObservableViewController {
         let tv = ThemedTableView(frame: .zero, style: .plain)
         tv.translatesAutoresizingMaskIntoConstraints = false
         tv.register(TopicCell.self, forCellReuseIdentifier: TopicCell.reuseIdentifier)
+        tv.register(PinnedTopicCell.self, forCellReuseIdentifier: PinnedTopicCell.reuseIdentifier)
         tv.delegate = self
         tv.showsVerticalScrollIndicator = false
 
@@ -44,17 +49,9 @@ final class HomeViewController: ObservableViewController {
 
     private lazy var dataSource: UITableViewDiffableDataSource<Int, Int> = .init(tableView: tableView) { [weak self] tableView, indexPath, topicId in
         guard let self,
-              let cell = tableView.dequeueReusableCell(withIdentifier: TopicCell.reuseIdentifier, for: indexPath) as? TopicCell,
               let topic = self.viewModel.topicsById[topicId]
         else {
             return UITableViewCell()
-        }
-        let assetBaseURL = self.api.assetBaseURL
-        var avatarURL: URL?
-        if let template = self.viewModel.avatarTemplate(for: topic) {
-            let sized = template.replacingOccurrences(of: "{size}", with: "96")
-            let urlString = sized.hasPrefix("http") ? sized : assetBaseURL + sized
-            avatarURL = URL(string: urlString)
         }
         let category = self.viewModel.category(for: topic)
         let categoryColor: UIColor? = category.flatMap { cat in
@@ -63,6 +60,25 @@ final class HomeViewController: ObservableViewController {
             let color = Self.color(fromHex: hex)
             if let color { self.categoryColorCache[hex] = color }
             return color
+        }
+
+        if topic.pinned == true {
+            guard let cell = tableView.dequeueReusableCell(withIdentifier: PinnedTopicCell.reuseIdentifier, for: indexPath) as? PinnedTopicCell else {
+                return UITableViewCell()
+            }
+            cell.configure(with: topic, categoryColor: categoryColor)
+            return cell
+        }
+
+        guard let cell = tableView.dequeueReusableCell(withIdentifier: TopicCell.reuseIdentifier, for: indexPath) as? TopicCell else {
+            return UITableViewCell()
+        }
+        let assetBaseURL = self.api.assetBaseURL
+        var avatarURL: URL?
+        if let template = self.viewModel.avatarTemplate(for: topic) {
+            let sized = template.replacingOccurrences(of: "{size}", with: "96")
+            let urlString = sized.hasPrefix("http") ? sized : assetBaseURL + sized
+            avatarURL = URL(string: urlString)
         }
         cell.configure(
             with: topic,
@@ -154,15 +170,6 @@ final class HomeViewController: ObservableViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
 
-        let segBottom = segmentedControl.frame.maxY + 8
-        let safeTop = view.safeAreaInsets.top
-        let extraInset = segBottom - safeTop
-
-        if tableView.contentInset.top != extraInset {
-            tableView.contentInset.top = extraInset
-        }
-        tableView.verticalScrollIndicatorInsets.top = extraInset
-
         if !hasPlacedComposeButton {
             hasPlacedComposeButton = true
             let safe = view.safeAreaLayoutGuide.layoutFrame
@@ -180,17 +187,12 @@ final class HomeViewController: ObservableViewController {
 
         tableView.tableHeaderView = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: CGFloat.leastNormalMagnitude))
         view.addSubview(tableView)
-        view.addSubview(segmentedControl)
 
         view.addSubview(activityIndicator)
         view.addSubview(errorLabel)
         view.addSubview(loginButton)
 
         NSLayoutConstraint.activate([
-            segmentedControl.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
-            segmentedControl.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
-            segmentedControl.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
-
             tableView.topAnchor.constraint(equalTo: view.topAnchor),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -208,42 +210,11 @@ final class HomeViewController: ObservableViewController {
             loginButton.topAnchor.constraint(equalTo: errorLabel.bottomAnchor, constant: 16),
         ])
 
-        if #available(iOS 26, *) {
-            let blurView = UIVisualEffectView(effect: UIGlassEffect())
-            blurView.translatesAutoresizingMaskIntoConstraints = false
-            blurView.layer.cornerRadius = segmentedControl.bounds.height / 2 + 1
-
-            blurView.clipsToBounds = true
-
-            segmentedControl.superview?.insertSubview(blurView, belowSubview: segmentedControl)
-
-            NSLayoutConstraint.activate([
-                blurView.topAnchor.constraint(equalTo: segmentedControl.topAnchor, constant: -2),
-                blurView.bottomAnchor.constraint(equalTo: segmentedControl.bottomAnchor, constant: 3),
-                blurView.leadingAnchor.constraint(equalTo: segmentedControl.leadingAnchor, constant: -2),
-                blurView.trailingAnchor.constraint(equalTo: segmentedControl.trailingAnchor, constant: 2),
-            ])
-        } else {
-            let blurView = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterial))
-            blurView.translatesAutoresizingMaskIntoConstraints = false
-            blurView.layer.cornerRadius = segmentedControl.bounds.height / 4
-
-            blurView.clipsToBounds = true
-
-            segmentedControl.superview?.insertSubview(blurView, belowSubview: segmentedControl)
-
-            NSLayoutConstraint.activate([
-                blurView.topAnchor.constraint(equalTo: segmentedControl.topAnchor, constant: -2),
-                blurView.bottomAnchor.constraint(equalTo: segmentedControl.bottomAnchor, constant: 2),
-                blurView.leadingAnchor.constraint(equalTo: segmentedControl.leadingAnchor, constant: -2),
-                blurView.trailingAnchor.constraint(equalTo: segmentedControl.trailingAnchor, constant: 2),
-            ])
-        }
-
-        segmentedControl.addTarget(self, action: #selector(segmentChanged), for: .valueChanged)
         loginButton.addTarget(self, action: #selector(loginTapped), for: .touchUpInside)
 
         navigationItem.leftBarButtonItem = UIBarButtonItem(customView: categoryButton)
+        inheritedRightBarItems = navigationItem.rightBarButtonItems ?? []
+        navigationItem.rightBarButtonItems = inheritedRightBarItems + [Self.makeRightBarSpacer(), sortBarButton]
 
         view.addSubview(composeButton)
         composeButton.frame = CGRect(x: 0, y: 0, width: composeButtonSize, height: composeButtonSize)
@@ -263,18 +234,17 @@ final class HomeViewController: ObservableViewController {
             errorLabel.isHidden = false
             loginButton.isHidden = false
             tableView.isHidden = true
-            segmentedControl.isHidden = true
+            navigationItem.rightBarButtonItems = inheritedRightBarItems
             activityIndicator.stopAnimating()
             return
         }
 
         loginButton.isHidden = true
         tableView.isHidden = false
-        segmentedControl.isHidden = false
-        segmentedControl.selectedSegmentTintColor = ThemeManager.shared.cardBackgroundColor
-        segmentedControl.backgroundColor = ThemeManager.shared.backgroundColor.withAlphaComponent(0.2)
+        navigationItem.rightBarButtonItems = inheritedRightBarItems + [Self.makeRightBarSpacer(), sortBarButton]
         composeButton.backgroundColor = ThemeManager.shared.accentColor
         categoryButton.menu = UIMenu(title: "", children: buildCategoryMenuElements())
+        sortBarButton.menu = buildSortMenu()
         updateCategoryButton()
         // Show non-login errors (e.g. rate limit) when topic list is empty
         if let error = viewModel.errorMessage, viewModel.topics.isEmpty {
@@ -307,12 +277,25 @@ final class HomeViewController: ObservableViewController {
         }
     }
 
-    @objc private func segmentChanged() {
-        switch segmentedControl.selectedSegmentIndex {
-        case 0: viewModel.listMode = .latest
-        case 1: viewModel.listMode = .hot
-        default: viewModel.listMode = .top
+    private func buildSortMenu() -> UIMenu {
+        let modes: [(HomeListMode, String, String)] = [
+            (.latest, String(localized: "home.latest"), "clock"),
+            (.hot, String(localized: "home.hot"), "flame"),
+            (.top, String(localized: "home.top"), "chart.bar"),
+        ]
+        let actions = modes.map { mode, title, symbol -> UIAction in
+            let state: UIMenuElement.State = viewModel.listMode == mode ? .on : .off
+            return UIAction(title: title, image: UIImage(systemName: symbol), state: state) { [weak self] _ in
+                self?.selectListMode(mode)
+            }
         }
+        return UIMenu(title: "", children: actions)
+    }
+
+    private func selectListMode(_ mode: HomeListMode) {
+        guard viewModel.listMode != mode else { return }
+        viewModel.listMode = mode
+        sortBarButton.menu = buildSortMenu()
         Task {
             await viewModel.loadTopics()
         }
@@ -499,6 +482,15 @@ final class HomeViewController: ObservableViewController {
             blue: CGFloat(rgb & 0xFF) / 255,
             alpha: 1
         )
+    }
+
+    private static func makeRightBarSpacer() -> UIBarButtonItem {
+        if #available(iOS 26.0, *) {
+            return .fixedSpace()
+        }
+        let spacer = UIBarButtonItem(barButtonSystemItem: .fixedSpace, target: nil, action: nil)
+        spacer.width = 16
+        return spacer
     }
 
     private static func colorDotImage(color: UIColor?) -> UIImage? {

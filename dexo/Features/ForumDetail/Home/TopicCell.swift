@@ -114,7 +114,7 @@ final class TopicCell: UITableViewCell {
         avatarHeightConstraint.constant = avatarSize
         avatarImageView.layer.cornerRadius = avatarSize / 2
 
-        configureTitleWithEmoji(topic.fancyTitle)
+        Self.applyEmojiTitle(topic.fancyTitle, to: titleLabel)
 
         // Reply count with gray→orange color
         let replies = max(topic.postsCount - 1, 0)
@@ -174,22 +174,21 @@ final class TopicCell: UITableViewCell {
 
     private static let emojiPattern = try! NSRegularExpression(pattern: ":([\\w\\-+]+):")
 
-    private func configureTitleWithEmoji(_ title: String) {
+    static func applyEmojiTitle(_ title: String, to label: UILabel) {
         guard !EmojiStore.lookupMap.isEmpty else {
-            titleLabel.attributedText = nil
-            titleLabel.text = title
+            label.attributedText = nil
+            label.text = title
             return
         }
-        let matches = Self.emojiPattern.matches(in: title, range: NSRange(title.startIndex..., in: title))
+        let matches = emojiPattern.matches(in: title, range: NSRange(title.startIndex..., in: title))
         guard !matches.isEmpty else {
-            titleLabel.attributedText = nil
-            titleLabel.text = title
+            label.attributedText = nil
+            label.text = title
             return
         }
 
-        // Single pass: build attributed string and check for resolvable emojis at the same time
         let result = NSMutableAttributedString()
-        let titleFont = titleLabel.font ?? FontManager.shared.font(size: 16, weight: .medium)
+        let titleFont = label.font ?? FontManager.shared.font(size: 16, weight: .medium)
         let attrs: [NSAttributedString.Key: Any] = [.font: titleFont]
         var lastEnd = title.startIndex
         var hasEmoji = false
@@ -218,10 +217,9 @@ final class TopicCell: UITableViewCell {
             lastEnd = fullRange.upperBound
         }
 
-        // No resolvable emojis found — use plain text (cheaper for UILabel)
         guard hasEmoji else {
-            titleLabel.attributedText = nil
-            titleLabel.text = title
+            label.attributedText = nil
+            label.text = title
             return
         }
 
@@ -229,18 +227,17 @@ final class TopicCell: UITableViewCell {
             result.append(NSAttributedString(string: String(title[lastEnd...]), attributes: attrs))
         }
 
-        titleLabel.attributedText = result
-        loadEmojiImages(in: result)
+        label.attributedText = result
+        loadEmojiImages(in: result, into: label)
     }
 
-    private func loadEmojiImages(in attributedString: NSMutableAttributedString) {
+    private static func loadEmojiImages(in attributedString: NSMutableAttributedString, into label: UILabel) {
         attributedString.enumerateAttribute(.attachment, in: NSRange(location: 0, length: attributedString.length)) { value, _, _ in
             guard let attachment = value as? EmojiTextAttachment, let url = attachment.emojiURL else { return }
-            SDWebImageManager.shared.loadImage(with: url, options: [], context: ImageCacheManager.shared.emojiContext, progress: nil) { [weak self] image, _, _, _, _, _ in
-                guard let image, let self else { return }
+            SDWebImageManager.shared.loadImage(with: url, options: [], context: ImageCacheManager.shared.emojiContext, progress: nil) { [weak label] image, _, _, _, _, _ in
+                guard let image, let label else { return }
                 attachment.image = image
-                // Redraw the label only — avoid full cell layout recalculation
-                self.titleLabel.setNeedsDisplay()
+                label.setNeedsDisplay()
             }
         }
     }

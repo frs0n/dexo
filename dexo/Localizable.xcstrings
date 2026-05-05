@@ -1288,6 +1288,22 @@
         }
       }
     },
+    "home.sort.accessibility.label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sort topics"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "排序方式"
+          }
+        }
+      }
+    },
     "home.login_prompt" : {
       "localizations" : {
         "en" : {
@@ -1768,6 +1784,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 条回复"
+          }
+        }
+      }
+    },
+    "topic.cell.a11y.pinned %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pinned: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "置顶:%@"
           }
         }
       }

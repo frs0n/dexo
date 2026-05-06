@@ -1,4 +1,7 @@
 What to Test
 
-- The Latest / Hot / Top switcher on the forum home moved from the top pill into the right-side navigation bar menu, freeing up vertical space for the topic list
-- Pinned topics now render as a compact row in the topic list — pin icon and title only — so they're easier to scroll past
+- Pinned topics on the home list are now compressed into a single bar with a pin icon, the topic title, and a Telegram-style segmented indicator (up to three slots) — tap to open, swipe or tap the indicator to switch
+- Tapping an email address inside post content no longer crashes; non-http(s) URLs are handed to the system
+- iPad: action sheets in Settings (appearance / boost display / DoH provider) and the post-flag menu no longer crash from a missing popover anchor
+- Topic detail tags under the title now use the active theme's accent color
+- Bottom-bar "jump to floor" button: tap still opens the floor input, long-press now reveals "Reverse order" (pins OP at top, lists the rest newest-first) and "By heat" (server-filtered summary view)

@@ -43,7 +43,9 @@
       "mcp__xcodebuildmcp__session_show_defaults",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(git log *)",
+      "mcp__xcodebuildmcp__discover_projs"
     ]
   },
   "enabledMcpjsonServers": [

@@ -37,12 +37,15 @@ final class HomeViewController: ObservableViewController {
         let tv = ThemedTableView(frame: .zero, style: .plain)
         tv.translatesAutoresizingMaskIntoConstraints = false
         tv.register(TopicCell.self, forCellReuseIdentifier: TopicCell.reuseIdentifier)
-        tv.register(PinnedTopicCell.self, forCellReuseIdentifier: PinnedTopicCell.reuseIdentifier)
         tv.delegate = self
         tv.showsVerticalScrollIndicator = false
 
         return tv
     }()
+
+    private let pinnedBar = PinnedTopicBar()
+
+    private let emptyHeaderPlaceholder = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: CGFloat.leastNormalMagnitude))
 
     /// Cache hex→UIColor conversions to avoid repeated string parsing.
     private var categoryColorCache: [String: UIColor] = [:]
@@ -60,14 +63,6 @@ final class HomeViewController: ObservableViewController {
             let color = Self.color(fromHex: hex)
             if let color { self.categoryColorCache[hex] = color }
             return color
-        }
-
-        if topic.pinned == true {
-            guard let cell = tableView.dequeueReusableCell(withIdentifier: PinnedTopicCell.reuseIdentifier, for: indexPath) as? PinnedTopicCell else {
-                return UITableViewCell()
-            }
-            cell.configure(with: topic, categoryColor: categoryColor)
-            return cell
         }
 
         guard let cell = tableView.dequeueReusableCell(withIdentifier: TopicCell.reuseIdentifier, for: indexPath) as? TopicCell else {
@@ -178,6 +173,31 @@ final class HomeViewController: ObservableViewController {
                 y: safe.maxY - composeButtonEdgeMargin - composeButtonSize / 2
             )
         }
+
+        if tableView.tableHeaderView === pinnedBar,
+           pinnedBar.frame.width != tableView.bounds.width {
+            pinnedBar.frame.size.width = tableView.bounds.width
+            tableView.tableHeaderView = pinnedBar
+        }
+    }
+
+    private func installPinnedHeader(items: [PinnedTopicBar.Item]) {
+        pinnedBar.setItems(items)
+        if items.isEmpty {
+            if tableView.tableHeaderView !== emptyHeaderPlaceholder {
+                tableView.tableHeaderView = emptyHeaderPlaceholder
+            }
+        } else {
+            pinnedBar.frame = CGRect(
+                x: 0,
+                y: 0,
+                width: tableView.bounds.width,
+                height: PinnedTopicBar.height
+            )
+            if tableView.tableHeaderView !== pinnedBar {
+                tableView.tableHeaderView = pinnedBar
+            }
+        }
     }
 
     override func viewDidLoad() {
@@ -185,7 +205,12 @@ final class HomeViewController: ObservableViewController {
         tableView.tableFooterView = footerSpinner
         tableView.refreshControl = refreshControl
 
-        tableView.tableHeaderView = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: CGFloat.leastNormalMagnitude))
+        tableView.tableHeaderView = emptyHeaderPlaceholder
+        pinnedBar.onSelect = { [weak self] topicId in
+            guard let self else { return }
+            let detailVC = TopicDetailViewController(api: self.api, topicId: topicId)
+            self.navigationController?.pushViewController(detailVC, animated: true)
+        }
         view.addSubview(tableView)
 
         view.addSubview(activityIndicator)
@@ -257,12 +282,24 @@ final class HomeViewController: ObservableViewController {
         var snapshot = NSDiffableDataSourceSnapshot<Int, Int>()
         snapshot.appendSections([0])
         var seen = Set<Int>()
-        let uniqueIds = viewModel.topics.compactMap { topic -> Int? in
-            guard seen.insert(topic.id).inserted else { return nil }
-            return topic.id
+        var pinnedItems: [PinnedTopicBar.Item] = []
+        var regularIds: [Int] = []
+        for topic in viewModel.topics {
+            guard seen.insert(topic.id).inserted else { continue }
+            if topic.pinned == true {
+                let color = viewModel.category(for: topic).flatMap { Self.color(fromHex: $0.color) }
+                pinnedItems.append(PinnedTopicBar.Item(
+                    topicId: topic.id,
+                    title: topic.fancyTitle,
+                    iconColor: color
+                ))
+            } else {
+                regularIds.append(topic.id)
+            }
         }
-        snapshot.appendItems(uniqueIds, toSection: 0)
+        snapshot.appendItems(regularIds, toSection: 0)
         dataSource.apply(snapshot, animatingDifferences: true)
+        installPinnedHeader(items: pinnedItems)
 
         if viewModel.isLoading {
             activityIndicator.startAnimating()

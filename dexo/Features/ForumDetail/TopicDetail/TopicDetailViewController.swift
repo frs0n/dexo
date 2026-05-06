@@ -906,11 +906,15 @@ final class TopicDetailViewController: ObservableViewController {
     // MARK: - Link Handling
 
     private func handleLink(_ url: URL) {
+        guard isWebURL(url) else {
+            UIApplication.shared.open(url)
+            return
+        }
+
         guard let baseHost = URL(string: baseURL)?.host,
               let linkHost = url.host
         else {
-            let safari = SFSafariViewController(url: url)
-            present(safari, animated: true)
+            presentSafari(url)
             return
         }
 
@@ -929,13 +933,21 @@ final class TopicDetailViewController: ObservableViewController {
                 let vc = UserProfileViewController(api: api, username: username)
                 navigationController?.pushViewController(vc, animated: true)
             } else {
-                let safari = SFSafariViewController(url: url)
-                present(safari, animated: true)
+                presentSafari(url)
             }
         } else {
-            let safari = SFSafariViewController(url: url)
-            present(safari, animated: true)
+            presentSafari(url)
         }
+    }
+
+    private func isWebURL(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http" || scheme == "https"
+    }
+
+    private func presentSafari(_ url: URL) {
+        let safari = SFSafariViewController(url: url)
+        present(safari, animated: true)
     }
 
     private func parseTopicId(from url: URL) -> Int? {
@@ -1669,12 +1681,17 @@ extension TopicDetailViewController: PostCellDelegate {
         }
     }
 
-    func postCell(didTapFlagPost post: DiscourseTopicDetail.Post) {
+    func postCell(didTapFlagPost post: DiscourseTopicDetail.Post, sourceView: UIView) {
         let alert = UIAlertController(
             title: String(localized: "post.flag"),
             message: String(localized: "post.flag.message"),
             preferredStyle: .actionSheet
         )
+        if let popover = alert.popoverPresentationController {
+            popover.sourceView = sourceView
+            popover.sourceRect = sourceView.bounds
+            popover.permittedArrowDirections = [.up, .down]
+        }
         let flagTypes: [(String, Int)] = [
             (String(localized: "post.flag.off_topic"), 3),
             (String(localized: "post.flag.inappropriate"), 4),

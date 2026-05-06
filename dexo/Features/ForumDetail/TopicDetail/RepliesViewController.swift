@@ -303,13 +303,21 @@ extension RepliesViewController {
 
 extension RepliesViewController: PostCellDelegate {
     func postCell(didTapImageURL url: URL, inPostId postId: Int) {
-        let safari = SFSafariViewController(url: url)
-        present(safari, animated: true)
+        openExternalURL(url)
     }
 
     func postCell(didTapLinkURL url: URL) {
-        let safari = SFSafariViewController(url: url)
-        present(safari, animated: true)
+        openExternalURL(url)
+    }
+
+    private func openExternalURL(_ url: URL) {
+        let scheme = url.scheme?.lowercased()
+        if scheme == "http" || scheme == "https" {
+            let safari = SFSafariViewController(url: url)
+            present(safari, animated: true)
+        } else {
+            UIApplication.shared.open(url)
+        }
     }
 
     func postCell(didTapShowRepliesForPostId postId: Int) {
@@ -546,7 +554,7 @@ extension RepliesViewController: PostCellDelegate {
         // Voting not supported in replies sheet
     }
 
-    func postCell(didTapFlagPost post: DiscourseTopicDetail.Post) {
+    func postCell(didTapFlagPost post: DiscourseTopicDetail.Post, sourceView: UIView) {
         // Flag not supported in replies sheet
     }
 

@@ -857,7 +857,7 @@ final class PostNativeCell: UITableViewCell {
                 attributes: .destructive
             ) { [weak self] _ in
                 guard let self, let post = self.currentPost else { return }
-                self.delegate?.postCell(didTapFlagPost: post)
+                self.delegate?.postCell(didTapFlagPost: post, sourceView: self.moreButton)
             })
         }
 

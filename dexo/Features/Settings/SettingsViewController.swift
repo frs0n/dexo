@@ -270,14 +270,15 @@ extension SettingsViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
 
+        let sourceView = tableView.cellForRow(at: indexPath)
         switch visibleSections[indexPath.section] {
         case .general:
             if indexPath.row == 1 {
-                showBoostDisplayPicker()
+                showBoostDisplayPicker(from: sourceView)
             }
         case .appearance:
             if indexPath.row == 0 {
-                showAppearancePicker()
+                showAppearancePicker(from: sourceView)
             } else if indexPath.row == 1 {
                 let vc = ThemePickerViewController()
                 navigationController?.pushViewController(vc, animated: true)
@@ -296,7 +297,7 @@ extension SettingsViewController: UITableViewDelegate {
             let row = networkRows()[indexPath.row]
             switch row {
             case .dohProvider:
-                showDohProviderPicker()
+                showDohProviderPicker(from: sourceView)
             case .dohCustomURL:
                 showCustomURLInput()
             default:
@@ -334,7 +335,7 @@ extension SettingsViewController {
         }
     }
 
-    private func showAppearancePicker() {
+    private func showAppearancePicker(from sourceView: UIView?) {
         let alert = UIAlertController(title: String(localized: "settings.dark_mode"), message: nil, preferredStyle: .actionSheet)
         for mode in AppSettings.AppearanceMode.allCases {
             let action = UIAlertAction(title: mode.title, style: .default) { [weak self] _ in
@@ -347,10 +348,11 @@ extension SettingsViewController {
             alert.addAction(action)
         }
         alert.addAction(UIAlertAction(title: String(localized: "action.cancel"), style: .cancel))
+        Self.anchorPopover(alert, to: sourceView)
         present(alert, animated: true)
     }
 
-    private func showBoostDisplayPicker() {
+    private func showBoostDisplayPicker(from sourceView: UIView?) {
         let alert = UIAlertController(title: String(localized: "settings.boost_display"), message: nil, preferredStyle: .actionSheet)
         for mode in AppSettings.BoostDisplayMode.allCases {
             let action = UIAlertAction(title: mode.title, style: .default) { [weak self] _ in
@@ -365,10 +367,11 @@ extension SettingsViewController {
             alert.addAction(action)
         }
         alert.addAction(UIAlertAction(title: String(localized: "action.cancel"), style: .cancel))
+        Self.anchorPopover(alert, to: sourceView)
         present(alert, animated: true)
     }
 
-    private func showDohProviderPicker() {
+    private func showDohProviderPicker(from sourceView: UIView?) {
         let alert = UIAlertController(title: "DoH Provider", message: nil, preferredStyle: .actionSheet)
         for provider in AppSettings.DoHProvider.allCases {
             let action = UIAlertAction(title: provider.title, style: .default) { [weak self] _ in
@@ -383,7 +386,15 @@ extension SettingsViewController {
             alert.addAction(action)
         }
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        Self.anchorPopover(alert, to: sourceView)
         present(alert, animated: true)
+    }
+
+    private static func anchorPopover(_ alert: UIAlertController, to view: UIView?) {
+        guard let view, let popover = alert.popoverPresentationController else { return }
+        popover.sourceView = view
+        popover.sourceRect = view.bounds
+        popover.permittedArrowDirections = [.up, .down]
     }
 
     #if DEBUG

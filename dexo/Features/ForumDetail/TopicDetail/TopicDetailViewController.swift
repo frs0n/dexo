@@ -796,32 +796,87 @@ final class TopicDetailViewController: ObservableViewController {
     /// Apply `snapshot` after a load-earlier prepend, keeping the anchor
     /// post visually anchored. New posts' heights are precomputed first so
     /// the cumulative-height math used by `rectForRow` is accurate.
-    /// Apply the prepend and shift `contentOffset` by exactly the height
-    /// added — keeps whatever is currently visible at the same screen
-    /// position. Always called from a settled scroll view (the trigger
-    /// path defers via `pendingLoadEarlier` until `isDragging`,
-    /// `isDecelerating`, and `isTracking` are all false), so no pan-
-    /// recognizer or deceleration shenanigans are needed.
+    /// Apply the prepend, anchoring the cell that was at the top of the
+    /// viewport at apply time to the same screen position.
+    ///
+    /// Always called from a settled scroll view (the trigger path defers via
+    /// `pendingLoadEarlier`), so no pan/decel fighting.
+    ///
+    /// The naive `contentOffset += deltaHeight` approach was off by several
+    /// floors when prepended posts contained blocks BlockHeightCalculator
+    /// can't size (table / details / poll / rawHTML) — those fall back to a
+    /// 200pt estimate, and `contentSize` grows by less than the real total.
+    ///
+    /// Instead: scroll the anchor row to the top, then offset by its
+    /// captured screen-Y. UITableView positions cells using the same
+    /// (possibly estimated) cumulative heights it uses to compute
+    /// `rectForRow`, so even when those numbers are wrong in absolute terms
+    /// the anchor cell still lands at exactly the screen position we asked
+    /// for — internally consistent is enough for visual correctness.
     private func applyLoadEarlierSnapshot(addedPostIds: [Int]) {
         precomputeHeightsSync(forPostIds: addedPostIds)
         let unresolved = addedPostIds.filter { precomputedTotalHeights[$0] == nil }
+
+        // Capture the top visible row AT APPLY TIME (not at trigger time) —
+        // the user may have moved between trigger and apply, and the row
+        // they're actually looking at when the snapshot lands is the one
+        // we want to anchor to.
+        var anchor: (postId: Int, screenY: CGFloat)?
+        if let topVisible = tableView.indexPathsForVisibleRows?.sorted().first,
+           let item = dataSource.itemIdentifier(for: topVisible)
+        {
+            let postId: Int
+            switch item {
+            case .post(let id), .boosts(let id): postId = id
+            }
+            let cellMinY = tableView.rectForRow(at: topVisible).minY
+            let screenY = cellMinY - tableView.contentOffset.y
+            anchor = (postId, screenY)
+        }
+
         let snapshot = buildSnapshot()
-        let oldContentHeight = tableView.contentSize.height
-        let oldOffset = tableView.contentOffset.y
-        debugLog("[loadEarlier] applying snapshotItems=\(snapshot.itemIdentifiers.count) added=\(addedPostIds.count) heightsUnresolved=\(unresolved.count) oldOffset=\(oldOffset) oldContentH=\(oldContentHeight)")
+        debugLog("[loadEarlier] applying snapshotItems=\(snapshot.itemIdentifiers.count) added=\(addedPostIds.count) heightsUnresolved=\(unresolved.count) anchor=\(anchor.map { "post#\($0.postId)@\($0.screenY)" } ?? "nil")")
+
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         dataSource.apply(snapshot, animatingDifferences: false)
-        tableView.layoutIfNeeded()
-        let newContentHeight = tableView.contentSize.height
-        let deltaHeight = newContentHeight - oldContentHeight
-        // Shift by exactly the added content's height. Since the prepend is
-        // entirely above the current viewport, this keeps the cells the user
-        // is looking at at the same screen Y. No anchor row lookup needed.
-        let target = oldOffset + deltaHeight
-        tableView.contentOffset.y = target
-        debugLog("[loadEarlier] applied newContentH=\(newContentHeight) deltaH=\(deltaHeight) newOffset=\(tableView.contentOffset.y)")
         CATransaction.commit()
+
+        guard let anchor,
+              let newIndexPath = dataSource.indexPath(for: .post(anchor.postId))
+        else {
+            debugLog("[loadEarlier] anchor lookup failed — falling back to deltaHeight shift")
+            // Fallback: shift by content-size delta. Imprecise for posts
+            // with unsizable blocks, but better than nothing.
+            tableView.layoutIfNeeded()
+            lastScrollOffset = tableView.contentOffset.y
+            return
+        }
+
+        // Two-pass scrollToRow + layoutIfNeeded:
+        //   pass 1 — places the anchor at top using estimated cumulative
+        //            heights for the just-prepended rows (they're not yet
+        //            displayed and lack precomputed heights for poll-like
+        //            blocks);
+        //   layoutIfNeeded forces the anchor + cells just below it to
+        //            render, populating their real heights;
+        //   pass 2 — re-places using whatever is now known, mostly to
+        //            absorb any contentSize adjustment UITableView did
+        //            during the layout pass.
+        // Then a final manual offset to honor the anchor's captured screen-Y
+        // (rather than pinning the anchor exactly at the top edge).
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        tableView.scrollToRow(at: newIndexPath, at: .top, animated: false)
+        CATransaction.commit()
+        tableView.layoutIfNeeded()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        tableView.scrollToRow(at: newIndexPath, at: .top, animated: false)
+        let cellMinY = tableView.rectForRow(at: newIndexPath).minY
+        tableView.contentOffset.y = cellMinY - anchor.screenY
+        CATransaction.commit()
+        debugLog("[loadEarlier] anchored — newCellMinY=\(cellMinY) screenY=\(anchor.screenY) offset=\(tableView.contentOffset.y)")
         lastScrollOffset = tableView.contentOffset.y
     }
 

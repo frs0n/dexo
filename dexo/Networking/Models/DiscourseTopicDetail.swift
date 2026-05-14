@@ -11,6 +11,10 @@ struct DiscourseTopicDetail: Decodable {
     let tags: [Tag]
     var postStream: PostStream
     let validReactions: [String]
+    /// Highest post number the authenticated user has read in this topic.
+    /// `nil` for anonymous fetches. Used by the jump-to-floor sheet to offer a
+    /// "first unread" shortcut.
+    let lastReadPostNumber: Int?
 
     enum CodingKeys: String, CodingKey {
         case id, title, tags
@@ -21,6 +25,7 @@ struct DiscourseTopicDetail: Decodable {
         case createdAt = "created_at"
         case postStream = "post_stream"
         case validReactions = "valid_reactions"
+        case lastReadPostNumber = "last_read_post_number"
     }
 
     init(from decoder: Decoder) throws {
@@ -35,6 +40,7 @@ struct DiscourseTopicDetail: Decodable {
         tags = (try? container.decodeIfPresent([Tag].self, forKey: .tags)) ?? []
         postStream = try container.decode(PostStream.self, forKey: .postStream)
         validReactions = (try? container.decodeIfPresent([String].self, forKey: .validReactions)) ?? []
+        lastReadPostNumber = try? container.decodeIfPresent(Int.self, forKey: .lastReadPostNumber)
     }
 
     struct PostStream: Decodable {

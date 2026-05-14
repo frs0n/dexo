@@ -150,20 +150,70 @@ final class TopicDetailViewController: ObservableViewController {
     private let baseURL: String
     private let assetBaseURL: String
     private var hasTitleHeader = false
-    private var isLoadingEarlierLocally = false
     private var pendingScrollIndexPath: (indexPath: IndexPath, position: UITableView.ScrollPosition)?
-    /// Scroll position to use the next time `viewModel.jumpTargetFloor` is consumed.
-    /// `.top` for ordinary jumps, `.bottom` after a reply so the new post sits at
-    /// the reader's focus. One-shot: resets to `.top` after each use.
-    private var nextJumpPosition: UITableView.ScrollPosition = .top
     private var lastScrollOffset: CGFloat = 0
     /// VC-level cache of rendered content views keyed by post ID.
     /// Avoids re-creating the entire view tree when scrolling back to a post.
     private var contentViewCache: [Int: [UIView]] = [:]
-    /// Suppress load-earlier after a jump until user scrolls down first
-    private var suppressLoadEarlier = false
-    /// Anchor info for restoring scroll position after loading earlier posts
-    private var earlierLoadAnchor: (postId: Int, cellTopOffset: CGFloat)?
+    /// Tracks whether a pagination flow (jump, load-earlier, load-more, reverse,
+    /// summary) is currently in flight. `updateUI` defers snapshot application
+    /// while non-`.idle` so the flow's own synchronous apply isn't fought by
+    /// the observable-driven default path.
+    ///
+    /// - `.idle`: `updateUI` is free to apply snapshots as observable state
+    ///   changes (e.g. content edits, reaction updates).
+    /// - `.jumping`: `jumpToFloor` / `loadTopic` cleared & is re-loading. The
+    ///   Task that started the flow will apply the snapshot and scroll
+    ///   explicitly once the VM await returns.
+    /// - `.loadingEarlier`: a prepend is in flight or queued. The Task awaits
+    ///   the VM; the snapshot apply itself is deferred to a settled scroll
+    ///   view (no drag, no decel) so the content shift can't fight against
+    ///   the pan gesture or residual momentum. Applied either inline (if
+    ///   already settled when the VM returns) or via
+    ///   `flushPendingLoadEarlierIfReady` from a settle delegate.
+    /// - `.loadingMore`: an append is in flight. The Task applies the snapshot
+    ///   while preserving the current contentOffset.
+    private enum PaginationContext {
+        case idle
+        case jumping
+        case loadingEarlier
+        case loadingMore
+    }
+    private var paginationContext: PaginationContext = .idle
+    /// A load-earlier response that's waiting for the scroll view to settle
+    /// (`isDragging` / `isDecelerating` / `isTracking` all false) before
+    /// applying. Trying to apply mid-drag fights the pan handler; mid-
+    /// decel fights residual velocity. Both manifest as "anchor doesn't
+    /// restore" + "fires again on the same gesture". Deferring to idle
+    /// dodges both.
+    private var pendingLoadEarlier: (addedPostIds: [Int], token: UInt)?
+    /// Bumped every time `paginationContext` is set to a non-idle value. Each
+    /// pagination Task captures the token at launch and only mutates
+    /// `paginationContext` / applies its snapshot if its token still matches —
+    /// otherwise a newer flow has taken over and the Task's results are stale.
+    ///
+    /// Without this, a load-earlier Task whose VM response was discarded by
+    /// `loadGeneration` would still run its trailing `paginationContext = .idle`
+    /// while a preempting jump was mid-await, opening the door for `updateUI`
+    /// to apply an intermediate empty snapshot.
+    private var paginationToken: UInt = 0
+    /// Token captured when the fast-path `scrollToRow(animated: true)` starts.
+    /// The animation has no completion callback, so we rely on the table
+    /// view's `scrollViewDidEndScrollingAnimation` delegate to release the
+    /// context. Reset to `nil` either there (clean end) or when a newer
+    /// pagination flow preempts the fast scroll.
+    private var fastPathScrollToken: UInt?
+    /// One-shot gate for the scroll-driven load-earlier trigger. Disarmed
+    /// after each trigger and re-armed only on a fresh `willBeginDragging`.
+    /// Without this, a single drag on a fast simulator can produce multiple
+    /// back-to-back triggers: the Task returns within the gesture, the apply
+    /// step overrides `contentOffset` to anchor-restored position, then
+    /// UIKit's pan handler immediately re-overrides it based on the still-
+    /// active pan translation — looking from `scrollViewDidScroll` like a
+    /// fresh scroll-up from far below right back into the trigger zone.
+    /// A contentOffset-threshold re-arm can't dodge that; the only stable
+    /// signal is "the user started a new drag".
+    private var loadEarlierArmed: Bool = true
     /// Cache actual cell heights to avoid jumps from inaccurate estimates
     private var cellHeightCache: [TopicDetailItem: CGFloat] = [:]
     /// Per-block heights computed by `BlockHeightCalculator`, fed back into
@@ -347,6 +397,22 @@ final class TopicDetailViewController: ObservableViewController {
 
     private let bottomBar = TopicDetailBottomBar()
 
+    private var jumpScrubber: JumpScrubberOverlay?
+    private var jumpScrubStartLocation: CGPoint = .zero
+    private var jumpScrubHasMoved: Bool = false
+    /// Starting floor at the moment the scrubber was summoned. Floor changes
+    /// are computed relative to this anchor.
+    private var jumpScrubStartFloor: Int = 1
+    /// Drag distance that maps to a full-range sweep. Same value on both
+    /// sides so the floor delta per pixel is constant regardless of where
+    /// the user is starting in the topic — dragging 30pt always means the
+    /// same number of floors whether you're at floor 1 or floor 600.
+    private var jumpScrubReferenceDistance: CGFloat = 1
+    /// Pixels of finger travel before we start applying floor changes; small
+    /// enough to feel responsive, large enough that just press-and-release
+    /// on the button never confirms a stray floor.
+    private let jumpScrubMoveThreshold: CGFloat = 8
+
     private lazy var jumpOverlay: UIView = {
         let v = UIView()
         v.translatesAutoresizingMaskIntoConstraints = false
@@ -422,15 +488,23 @@ final class TopicDetailViewController: ObservableViewController {
         Task {
             let jumpFloor = initialFloor
             initialFloor = nil
+            let token = enterPaginationContext(.jumping)
             await viewModel.loadTopic(id: topicId, containerWidth: view.bounds.width)
+            // If the user opened the jump sheet (or replied) before the initial
+            // load finished, the newer flow has bumped the token — bail and let
+            // it handle its own snapshot/scroll.
+            guard paginationTokenIsCurrent(token) else { return }
             if let jumpFloor, jumpFloor > 1 {
-                suppressLoadEarlier = true
-                cellHeightCache.removeAll()
-                contentViewCache.removeAll()
-                precomputedBlockHeights.removeAll()
-                precomputedTotalHeights.removeAll()
+                invalidateRenderCaches()
                 await viewModel.jumpToFloor(jumpFloor, containerWidth: view.bounds.width)
+                guard paginationTokenIsCurrent(token) else { return }
+                applyJumpSnapshot(target: jumpFloor, position: .top)
+            } else {
+                // No explicit target — just apply the snapshot once data is in.
+                let snapshot = buildSnapshot()
+                dataSource.apply(snapshot, animatingDifferences: false, completion: nil)
             }
+            endPaginationContext(token)
         }
         Task {
             await api.loadOrFetchEmojiMap()
@@ -573,21 +647,136 @@ final class TopicDetailViewController: ObservableViewController {
         }
     }
 
-    /// Scrolls to the row corresponding to `floor` with a two-pass approach so
-    /// the offset is accurate even when cell heights start as estimates:
-    /// 1. First scroll uses estimates to get roughly in range.
-    /// 2. `layoutIfNeeded` forces cells near the target to render, caching their
-    ///    real heights via `willDisplay`.
-    /// 3. Second scroll re-runs with real heights and lands accurately.
-    private func performJumpScroll(toFloor floor: Int, position: UITableView.ScrollPosition) {
-        guard let postIndex = viewModel.visibleRowForFloor(floor) else { return }
-        var targetRow = postIndex
-        for i in 0..<postIndex where !viewModel.visiblePosts[i].boosts.isEmpty {
-            targetRow += 1
+    // MARK: - Pagination flow primitives
+    //
+    // The four pagination operations (initial load, jump, load-more,
+    // load-earlier) all share the same three-step shape:
+    //
+    //   1. Set `paginationContext` so `updateUI` defers snapshot apply.
+    //   2. Await the VM operation. During the await, observable mutations
+    //      will queue `updateUI` calls but the snapshot apply step is
+    //      skipped (the context is non-`.idle`).
+    //   3. After the VM returns, synchronously precompute heights for
+    //      newly-loaded posts (so `rectForRow` gives accurate offsets),
+    //      apply the snapshot, restore scroll position, then set the
+    //      context back to `.idle`. A trailing `updateUI` will re-fire on
+    //      RunLoop tick but the snapshot already matches, so it's a no-op.
+    //
+    // This keeps the snapshot/scroll state under the control of the entry
+    // point that initiated the operation rather than spread across
+    // observable callbacks.
+
+    /// Switch into a new pagination context and return a token the caller can
+    /// re-check on Task completion. The token only matches as long as no
+    /// later flow has taken over.
+    @discardableResult
+    private func enterPaginationContext(_ context: PaginationContext) -> UInt {
+        paginationToken &+= 1
+        paginationContext = context
+        // A window-replacing flow lands the user at a new position; reset the
+        // load-earlier gate so the first pull-up after the jump can fire.
+        if case .jumping = context { loadEarlierArmed = true }
+        // Drop any pending load-earlier apply — its captured token is now
+        // stale, and applying its prepend over the new flow's window would
+        // splice old posts into the wrong place (or just no-op via the token
+        // check, leaking the array reference).
+        pendingLoadEarlier = nil
+        return paginationToken
+    }
+
+    /// Reset to `.idle` iff the caller's `token` still owns the context. Skip
+    /// when a newer flow has overwritten the context — that flow will reset
+    /// `.idle` on its own completion.
+    private func endPaginationContext(_ token: UInt) {
+        guard paginationToken == token else { return }
+        paginationContext = .idle
+    }
+
+    /// True iff the flow that captured `token` still owns the context. Tasks
+    /// gate their `applyXxxSnapshot` on this so a stale completion never
+    /// clobbers a newer flow's visible state (e.g. an old jump's
+    /// `applyJumpSnapshot` scrolling to its target after the user has already
+    /// kicked off another jump to a different floor).
+    private func paginationTokenIsCurrent(_ token: UInt) -> Bool {
+        paginationToken == token
+    }
+
+    /// Drop every render cache. Called before a window-replacing flow
+    /// (`jumpToFloor`, `enableReverseOrder`, `toggleSummaryMode`) — the new
+    /// posts will produce fresh heights and content views on first display.
+    private func invalidateRenderCaches() {
+        cellHeightCache.removeAll()
+        contentViewCache.removeAll()
+        precomputedBlockHeights.removeAll()
+        precomputedTotalHeights.removeAll()
+    }
+
+    /// Build the diffable-data-source snapshot from the current view-model
+    /// state. Pure — no side effects.
+    private func buildSnapshot() -> NSDiffableDataSourceSnapshot<Int, TopicDetailItem> {
+        var snapshot = NSDiffableDataSourceSnapshot<Int, TopicDetailItem>()
+        snapshot.appendSections([0])
+        var seen = Set<Int>()
+        var items: [TopicDetailItem] = []
+        for post in viewModel.visiblePosts {
+            guard viewModel.parsedBlocks[post.id] != nil,
+                  seen.insert(post.id).inserted else { continue }
+            items.append(.post(post.id))
+            if viewModel.expandedBoostPostIds.contains(post.id) {
+                items.append(.boosts(post.id))
+            }
         }
-        let rowCount = tableView.numberOfRows(inSection: 0)
-        guard rowCount > 0 else { return }
-        let safeRow = min(targetRow, rowCount - 1)
+        snapshot.appendItems(items, toSection: 0)
+        return snapshot
+    }
+
+    /// Synchronously precompute block + total heights for `postIds` using the
+    /// same code path the background warmup uses. Called before reading
+    /// `rectForRow` so the table-view's cumulative-height math (used for
+    /// scroll-position restoration) uses real heights instead of the 200pt
+    /// estimate — which would otherwise drift the user's reading position
+    /// by ten-plus floors after a load-earlier on text-heavy threads.
+    private func precomputeHeightsSync(forPostIds postIds: [Int]) {
+        let width = tableView.bounds.width
+        guard width > 0 else { return }
+        if width != precomputedWidth {
+            precomputedBlockHeights.removeAll(keepingCapacity: true)
+            precomputedTotalHeights.removeAll(keepingCapacity: true)
+            precomputedWidth = width
+        }
+        let config = NativeRenderConfig.default(contentWidth: width - 24, baseURL: baseURL)
+        let chrome = PostNativeCell.chromeHeight()
+        let stackSpacing = NativeContentRenderer.contentStackSpacing
+        for postId in postIds {
+            guard precomputedBlockHeights[postId] == nil,
+                  let blocks = viewModel.parsedBlocks[postId]
+            else { continue }
+            let heights = BlockHeightCalculator.perBlockHeights(annotatedBlocks: blocks, config: config)
+            precomputedBlockHeights[postId] = heights
+            if heights.allSatisfy({ $0 != nil }) {
+                let resolved = heights.compactMap { $0 }
+                let contentH = resolved.isEmpty
+                    ? 0
+                    : resolved.reduce(0, +) + CGFloat(heights.count - 1) * stackSpacing
+                precomputedTotalHeights[postId] = chrome + contentH
+            }
+        }
+    }
+
+    /// Apply `snapshot` and scroll so the row for `floor` lands at the
+    /// requested screen position. Uses a two-pass approach so the offset
+    /// is accurate even when cell heights are still estimates near the
+    /// target row.
+    private func applyJumpSnapshot(target floor: Int, position: UITableView.ScrollPosition) {
+        let snapshot = buildSnapshot()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        dataSource.apply(snapshot, animatingDifferences: false)
+        CATransaction.commit()
+
+        guard let postIndex = viewModel.visibleRowForFloor(floor),
+              let safeRow = tableRow(forVisiblePostIndex: postIndex)
+        else { return }
         let indexPath = IndexPath(row: safeRow, section: 0)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -602,6 +791,54 @@ final class TopicDetailViewController: ObservableViewController {
         // Keep a retry target in case the cell's height changes later (async
         // image loads, delayed content sizing).
         pendingScrollIndexPath = (indexPath, position)
+    }
+
+    /// Apply `snapshot` after a load-earlier prepend, keeping the anchor
+    /// post visually anchored. New posts' heights are precomputed first so
+    /// the cumulative-height math used by `rectForRow` is accurate.
+    /// Apply the prepend and shift `contentOffset` by exactly the height
+    /// added — keeps whatever is currently visible at the same screen
+    /// position. Always called from a settled scroll view (the trigger
+    /// path defers via `pendingLoadEarlier` until `isDragging`,
+    /// `isDecelerating`, and `isTracking` are all false), so no pan-
+    /// recognizer or deceleration shenanigans are needed.
+    private func applyLoadEarlierSnapshot(addedPostIds: [Int]) {
+        precomputeHeightsSync(forPostIds: addedPostIds)
+        let unresolved = addedPostIds.filter { precomputedTotalHeights[$0] == nil }
+        let snapshot = buildSnapshot()
+        let oldContentHeight = tableView.contentSize.height
+        let oldOffset = tableView.contentOffset.y
+        debugLog("[loadEarlier] applying snapshotItems=\(snapshot.itemIdentifiers.count) added=\(addedPostIds.count) heightsUnresolved=\(unresolved.count) oldOffset=\(oldOffset) oldContentH=\(oldContentHeight)")
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        dataSource.apply(snapshot, animatingDifferences: false)
+        tableView.layoutIfNeeded()
+        let newContentHeight = tableView.contentSize.height
+        let deltaHeight = newContentHeight - oldContentHeight
+        // Shift by exactly the added content's height. Since the prepend is
+        // entirely above the current viewport, this keeps the cells the user
+        // is looking at at the same screen Y. No anchor row lookup needed.
+        let target = oldOffset + deltaHeight
+        tableView.contentOffset.y = target
+        debugLog("[loadEarlier] applied newContentH=\(newContentHeight) deltaH=\(deltaHeight) newOffset=\(tableView.contentOffset.y)")
+        CATransaction.commit()
+        lastScrollOffset = tableView.contentOffset.y
+    }
+
+    /// Apply `snapshot` after a load-more append, preserving the current
+    /// scroll position so the user's reading position doesn't jump.
+    private func applyLoadMoreSnapshot(addedPostIds: [Int]) {
+        precomputeHeightsSync(forPostIds: addedPostIds)
+        let snapshot = buildSnapshot()
+        let offsetBefore = tableView.contentOffset
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        dataSource.apply(snapshot, animatingDifferences: false)
+        if abs(tableView.contentOffset.y - offsetBefore.y) > 1 {
+            tableView.contentOffset = offsetBefore
+        }
+        CATransaction.commit()
+        lastScrollOffset = tableView.contentOffset.y
     }
 
     override func updateUI() {
@@ -658,73 +895,22 @@ final class TopicDetailViewController: ObservableViewController {
         // OP filter button state
         bottomBar.setOPOnlySelected(viewModel.isFilteringByOP)
 
-        // Show posts — all visible posts that have parsed blocks
+        // Snapshot apply — skipped when a pagination flow is mid-flight
+        // (the flow's own Task will apply synchronously once the VM await
+        // returns, with the right anchor / scroll-target context).
         if viewModel.isReady {
             tableView.isHidden = false
-            var snapshot = NSDiffableDataSourceSnapshot<Int, TopicDetailItem>()
-            snapshot.appendSections([0])
-            var seen = Set<Int>()
-            var items: [TopicDetailItem] = []
-            for post in viewModel.visiblePosts {
-                guard viewModel.parsedBlocks[post.id] != nil,
-                      seen.insert(post.id).inserted else { continue }
-                items.append(.post(post.id))
-                if viewModel.expandedBoostPostIds.contains(post.id) {
-                    items.append(.boosts(post.id))
+            if case .idle = paginationContext {
+                let snapshot = buildSnapshot()
+                let current = dataSource.snapshot()
+                if snapshot.itemIdentifiers != current.itemIdentifiers {
+                    let offsetBefore = current.numberOfItems > 0 ? tableView.contentOffset : nil
+                    dataSource.apply(snapshot, animatingDifferences: false)
+                    if let offsetBefore, abs(tableView.contentOffset.y - offsetBefore.y) > 1 {
+                        tableView.contentOffset = offsetBefore
+                    }
                 }
             }
-            snapshot.appendItems(items, toSection: 0)
-
-            // Skip snapshot application if items haven't changed — avoids unnecessary layout recalculation
-            let currentSnapshot = dataSource.snapshot()
-            let needsApply = earlierLoadAnchor != nil
-                || snapshot.itemIdentifiers != currentSnapshot.itemIdentifiers
-
-            // Restore scroll position when earlier posts were prepended
-            if let anchor = earlierLoadAnchor {
-                earlierLoadAnchor = nil
-                CATransaction.begin()
-                CATransaction.setDisableActions(true)
-                dataSource.apply(snapshot, animatingDifferences: false)
-                tableView.layoutIfNeeded()
-                if let newIndexPath = dataSource.indexPath(for: TopicDetailItem.post(anchor.postId)) {
-                    let newCellTop = tableView.rectForRow(at: newIndexPath).minY
-                    tableView.contentOffset.y = newCellTop - anchor.cellTopOffset
-                }
-                CATransaction.commit()
-                isLoadingEarlierLocally = false
-            } else if needsApply {
-                // Preserve scroll position when table already has content (e.g. load-more append).
-                // apply(animatingDifferences:false) can recalculate cell heights — if any visible
-                // cell changed height from async loads, the offset jumps.
-                let hasExistingRows = dataSource.snapshot().numberOfItems > 0
-                let offsetBefore = hasExistingRows ? tableView.contentOffset : nil
-                dataSource.apply(snapshot, animatingDifferences: false)
-                if let offsetBefore, abs(tableView.contentOffset.y - offsetBefore.y) > 1 {
-                    tableView.contentOffset = offsetBefore
-                }
-            }
-
-            // Scroll to the jump target synchronously after the snapshot is
-            // applied. Going through `viewDidLayoutSubviews` added a hop that
-            // didn't always fire; performing the scroll here runs every time
-            // the target floor changes.
-            //
-            // Skip while a jump's network fetch is still in flight: clearing
-            // posts at the start of `jumpToFloor` itself fires `updateUI` with
-            // an empty snapshot. Without the `isJumping` guard, that intermediate
-            // pass consumes `jumpTargetFloor` and `performJumpScroll` no-ops
-            // (no visible row matches the target) — so when the batch finally
-            // lands there is nothing left to scroll on.
-            if !viewModel.isJumping, let targetFloor = viewModel.jumpTargetFloor {
-                viewModel.jumpTargetFloor = nil
-                let position = nextJumpPosition
-                nextJumpPosition = .top
-                performJumpScroll(toFloor: targetFloor, position: position)
-            }
-
-            // Newly-applied posts may not have heights yet — pre-warm in the
-            // background so they're cached by the time they scroll into view.
             warmHeightCacheInBackground()
         }
     }
@@ -1026,11 +1212,6 @@ final class TopicDetailViewController: ObservableViewController {
 // MARK: - TopicDetailBottomBarDelegate
 
 extension TopicDetailViewController: TopicDetailBottomBarDelegate {
-    func bottomBarDidTapScrollToTop() {
-        guard tableView.numberOfRows(inSection: 0) > 0 else { return }
-        tableView.scrollToRow(at: IndexPath(row: 0, section: 0), at: .top, animated: true)
-    }
-
     func bottomBarDidTapOPOnly() {
         viewModel.isFilteringByOP.toggle()
     }
@@ -1039,56 +1220,118 @@ extension TopicDetailViewController: TopicDetailBottomBarDelegate {
         let total = viewModel.totalFloors
         guard total > 0 else { return }
 
-        let alert = UIAlertController(
-            title: String(localized: "topic_detail.bar.jump_to_floor"),
-            message: String(localized: "topic_detail.jump.message \(total)"),
-            preferredStyle: .alert
+        let sheet = JumpToFloorSheetViewController(
+            totalFloors: total,
+            currentFloor: currentVisibleFloor() ?? 1,
+            firstUnreadFloor: firstUnreadFloor(),
+            isReverseOrder: viewModel.isReverseOrder,
+            isSummaryMode: viewModel.isSummaryMode
         )
-        alert.addTextField { textField in
-            textField.placeholder = "1-\(total)"
-            textField.keyboardType = .numberPad
+        sheet.onJump = { [weak self] floor in
+            self?.performJump(toFloor: floor)
         }
-        alert.addAction(UIAlertAction(title: String(localized: "action.cancel"), style: .cancel))
-        alert.addAction(UIAlertAction(title: String(localized: "topic_detail.jump.confirm"), style: .default) { [weak self] _ in
-            guard let self,
-                  let text = alert.textFields?.first?.text,
-                  let floor = Int(text),
-                  floor >= 1, floor <= total
-            else { return }
+        sheet.onToggleReverseOrder = { [weak self] in
+            self?.bottomBarDidToggleReverseOrder()
+        }
+        sheet.onToggleSummaryMode = { [weak self] in
+            self?.bottomBarDidToggleSummaryMode()
+        }
+        if let presentation = sheet.sheetPresentationController {
+            presentation.detents = [.medium()]
+            presentation.prefersGrabberVisible = true
+        }
+        present(sheet, animated: true)
+    }
 
-            // If already loaded, just scroll
-            if self.viewModel.isFloorLoaded(floor),
-               let postIndex = self.viewModel.visibleRowForFloor(floor)
-            {
-                // Calculate actual row: add one boosts row per prior post that has boosts
-                var targetRow = postIndex
-                for i in 0..<postIndex {
-                    if !self.viewModel.visiblePosts[i].boosts.isEmpty {
-                        targetRow += 1
-                    }
-                }
-                self.tableView.scrollToRow(
-                    at: IndexPath(row: targetRow, section: 0),
-                    at: .top,
-                    animated: true
-                )
+    /// Convert a `visiblePosts` index into the table view's row index, taking
+    /// into account that each preceding post with an **expanded** boost row
+    /// adds one extra row to the snapshot. Clamped to the current row count
+    /// to defend against a snapshot/cell-state mismatch (out-of-bounds crash).
+    private func tableRow(forVisiblePostIndex postIndex: Int) -> Int? {
+        let rowCount = tableView.numberOfRows(inSection: 0)
+        guard rowCount > 0 else { return nil }
+        var targetRow = postIndex
+        let expanded = viewModel.expandedBoostPostIds
+        let visible = viewModel.visiblePosts
+        for i in 0..<min(postIndex, visible.count) where expanded.contains(visible[i].id) {
+            targetRow += 1
+        }
+        return min(targetRow, rowCount - 1)
+    }
+
+    /// Resolve the floor of the topmost visible row. UIKit doesn't formally
+    /// guarantee `indexPathsForVisibleRows` is ordered, and stale entries can
+    /// linger mid-snapshot-apply, so we sort and iterate until a valid post
+    /// is found — protects against the scrubber opening at a stale "last
+    /// loaded" floor after a jump.
+    private func currentVisibleFloor() -> Int? {
+        guard let visible = tableView.indexPathsForVisibleRows, !visible.isEmpty else {
+            return nil
+        }
+        for indexPath in visible.sorted() {
+            guard let item = dataSource.itemIdentifier(for: indexPath) else { continue }
+            let postId: Int
+            switch item {
+            case .post(let id), .boosts(let id):
+                postId = id
+            }
+            if let post = viewModel.postsById[postId] {
+                return post.postNumber
+            }
+        }
+        return nil
+    }
+
+    /// First floor the authenticated user hasn't read yet, if Discourse
+    /// reported `last_read_post_number`. Returns `nil` when everything is
+    /// read or the field is missing (anonymous fetch).
+    private func firstUnreadFloor() -> Int? {
+        guard let lastRead = viewModel.topic?.lastReadPostNumber,
+              lastRead > 0,
+              lastRead < viewModel.totalFloors
+        else { return nil }
+        return lastRead + 1
+    }
+
+    private func performJump(toFloor floor: Int) {
+        let total = viewModel.totalFloors
+        guard floor >= 1, floor <= total else { return }
+
+        // Fast path: floor already in the current window — just scroll.
+        // Take the .jumping context for the duration of the animation so the
+        // intra-animation scroll callbacks don't trigger a stray load-earlier
+        // with an anchor captured at some intermediate row.
+        if viewModel.isFloorLoaded(floor),
+           let postIndex = viewModel.visibleRowForFloor(floor),
+           let safeRow = tableRow(forVisiblePostIndex: postIndex)
+        {
+            let token = enterPaginationContext(.jumping)
+            fastPathScrollToken = token
+            tableView.scrollToRow(
+                at: IndexPath(row: safeRow, section: 0),
+                at: .top,
+                animated: true
+            )
+            return
+        }
+
+        // Slow path: replace the window. The pagination context gates
+        // `updateUI`'s default snapshot apply, then our Task applies the new
+        // snapshot + scroll in one synchronous step once the VM await returns.
+        showJumpOverlay()
+        hasTitleHeader = false
+        invalidateRenderCaches()
+        let token = enterPaginationContext(.jumping)
+        Task {
+            await viewModel.jumpToFloor(floor, containerWidth: view.bounds.width)
+            guard paginationTokenIsCurrent(token) else {
+                hideJumpOverlay()
                 return
             }
-
-            // Show overlay while fetching; scroll is handled in `updateUI` via `jumpTargetFloor` consumption.
-            self.showJumpOverlay()
-            self.hasTitleHeader = false
-            self.suppressLoadEarlier = true
-            self.cellHeightCache.removeAll()
-            self.contentViewCache.removeAll()
-            self.precomputedBlockHeights.removeAll()
-            self.precomputedTotalHeights.removeAll()
-            Task {
-                await self.viewModel.jumpToFloor(floor, containerWidth: self.view.bounds.width)
-                self.hideJumpOverlay()
-            }
-        })
-        present(alert, animated: true)
+            applyJumpSnapshot(target: floor, position: .top)
+            endPaginationContext(token)
+            hideJumpOverlay()
+        }
     }
 
     private func showJumpOverlay() {
@@ -1124,14 +1367,21 @@ extension TopicDetailViewController: TopicDetailBottomBarDelegate {
         }
         // Turning ON — clear caches and re-fetch OP + last batch.
         hasTitleHeader = false
-        suppressLoadEarlier = true
-        cellHeightCache.removeAll()
-        contentViewCache.removeAll()
-        precomputedBlockHeights.removeAll()
-        precomputedTotalHeights.removeAll()
+        invalidateRenderCaches()
         showJumpOverlay()
+        let token = enterPaginationContext(.jumping)
         Task {
             await viewModel.enableReverseOrder(containerWidth: view.bounds.width)
+            guard paginationTokenIsCurrent(token) else {
+                hideJumpOverlay()
+                return
+            }
+            // Reverse mode pins OP at the top of `visiblePosts`; apply the
+            // snapshot and let UIKit settle on offset 0 (the OP).
+            let snapshot = buildSnapshot()
+            dataSource.apply(snapshot, animatingDifferences: false, completion: nil)
+            tableView.contentOffset.y = -tableView.adjustedContentInset.top
+            endPaginationContext(token)
             hideJumpOverlay()
         }
     }
@@ -1140,16 +1390,107 @@ extension TopicDetailViewController: TopicDetailBottomBarDelegate {
         // Summary view is a server-filtered re-fetch — invalidate everything
         // that would otherwise hold stale per-floor state.
         hasTitleHeader = false
-        suppressLoadEarlier = true
-        cellHeightCache.removeAll()
-        contentViewCache.removeAll()
-        precomputedBlockHeights.removeAll()
-        precomputedTotalHeights.removeAll()
+        invalidateRenderCaches()
         showJumpOverlay()
+        let token = enterPaginationContext(.jumping)
         Task {
             await viewModel.toggleSummaryMode(containerWidth: view.bounds.width)
+            guard paginationTokenIsCurrent(token) else {
+                hideJumpOverlay()
+                return
+            }
+            let snapshot = buildSnapshot()
+            dataSource.apply(snapshot, animatingDifferences: false, completion: nil)
+            tableView.contentOffset.y = -tableView.adjustedContentInset.top
+            endPaginationContext(token)
             hideJumpOverlay()
         }
+    }
+
+    // MARK: - Scrubber (continuous long-press → drag → release)
+
+    func bottomBarDidBeginScrubFromJump(at locationInWindow: CGPoint, buttonFrame: CGRect) {
+        let total = viewModel.totalFloors
+        guard total > 1, jumpScrubber == nil else { return }
+
+        let startingFloor = currentVisibleFloor() ?? 1
+        jumpScrubStartLocation = view.convert(locationInWindow, from: nil)
+        jumpScrubHasMoved = false
+        jumpScrubStartFloor = startingFloor
+
+        // Reference distance = the more restrictive of the two reachable
+        // halves (left or right of the press point, minus a comfortable
+        // bezel margin). Dragging this distance in either direction sweeps
+        // the entire range; overshoot is naturally clamped at floor 1 / last.
+        // Constant on both sides so the sensitivity is identical going left
+        // or right — same drag → same number of floors, no matter where
+        // you start in the topic.
+        let safeMargin: CGFloat = 60
+        let leftSpace = max(jumpScrubStartLocation.x - safeMargin, 1)
+        let rightSpace = max(view.bounds.width - jumpScrubStartLocation.x - safeMargin, 1)
+        jumpScrubReferenceDistance = min(leftSpace, rightSpace)
+
+        // Compact arc, centred horizontally above the bottom bar.
+        let barTopInView = bottomBar.convert(bottomBar.bounds, to: view).minY
+        let radius: CGFloat = 130
+        let arcCenter = CGPoint(x: view.bounds.midX, y: barTopInView - 24)
+
+        let overlay = JumpScrubberOverlay(
+            totalFloors: total,
+            startingFloor: startingFloor,
+            arcCenter: arcCenter,
+            radius: radius
+        )
+        overlay.frame = view.bounds
+        overlay.translatesAutoresizingMaskIntoConstraints = true
+        view.addSubview(overlay)
+        overlay.presentTransitionIn()
+        jumpScrubber = overlay
+
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+    }
+
+    func bottomBarDidUpdateScrub(at locationInWindow: CGPoint) {
+        guard let overlay = jumpScrubber else { return }
+        let location = view.convert(locationInWindow, from: nil)
+
+        // Don't apply any floor change until the user crosses the move
+        // threshold — a stray press-then-release shouldn't confirm a stray
+        // floor.
+        if !jumpScrubHasMoved {
+            let dist = hypot(
+                location.x - jumpScrubStartLocation.x,
+                location.y - jumpScrubStartLocation.y
+            )
+            guard dist >= jumpScrubMoveThreshold else { return }
+            jumpScrubHasMoved = true
+        }
+
+        // Constant sensitivity: a given drag distance always corresponds to
+        // the same number of floors, regardless of starting floor. From the
+        // middle, dragging X pts feels like dragging X pts from floor 1.
+        // Overshoot is clamped to the boundary at the end of the calculation.
+        let dx = location.x - jumpScrubStartLocation.x
+        let total = viewModel.totalFloors
+        let normalized = min(abs(dx) / jumpScrubReferenceDistance, 1.0)
+        let curved = pow(normalized, 1.8)
+        let delta = Int((curved * CGFloat(total - 1)).rounded())
+        let signedDelta = dx >= 0 ? delta : -delta
+        let newFloor = max(1, min(total, jumpScrubStartFloor + signedDelta))
+        overlay.update(floor: newFloor)
+    }
+
+    func bottomBarDidEndScrub(cancelled: Bool) {
+        guard let overlay = jumpScrubber else { return }
+        jumpScrubber = nil
+        overlay.presentTransitionOut()
+
+        // Only jump if the user actually moved and the gesture wasn't
+        // interrupted — otherwise the gesture was a no-op accidental press.
+        if cancelled || !jumpScrubHasMoved { return }
+        let floor = overlay.currentFloor
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        performJump(toFloor: floor)
     }
 }
 
@@ -1357,44 +1698,69 @@ extension TopicDetailViewController: UITableViewDelegate {
         let isScrollingUp = currentOffset < lastScrollOffset
         lastScrollOffset = currentOffset
 
-        // Clear suppress flag once user scrolls down, meaning they've settled after a jump
-        if !isScrollingUp {
-            suppressLoadEarlier = false
-        }
-
-        // Only trigger load-earlier when user is actively scrolling UP
-        // and within 200pt of the top — prevents false triggers after jump.
-        // In reverse mode the top is the pinned OP; loading "earlier"
-        // from there is meaningless, so skip the trigger entirely.
+        // Trigger load-earlier only when:
+        // - user is actively scrolling UP (revealing content above)
+        // - we're not already in a pagination flow
+        // - the VM has room to grow toward earlier posts
+        // - we're not in reverse order (top is the pinned OP)
+        // - the one-shot gate is armed (re-armed only on a new drag)
+        // - we're within 200pt of the visual top.
         guard isScrollingUp,
-              !suppressLoadEarlier,
+              case .idle = paginationContext,
+              loadEarlierArmed,
               viewModel.canLoadEarlier,
-              !isLoadingEarlierLocally,
               !viewModel.isReverseOrder
         else { return }
         let contentTop = -(scrollView.adjustedContentInset.top)
-        if scrollView.contentOffset.y <= contentTop + 200 {
-            // Capture anchor synchronously before any async work
-            if let anchorIndexPath = tableView.indexPathsForVisibleRows?.first,
-               let item = dataSource.itemIdentifier(for: anchorIndexPath)
-            {
-                // Only use post items as anchor
-                let anchorId: Int
-                switch item {
-                case .post(let postId):
-                    anchorId = postId
-                case .boosts(let postId):
-                    anchorId = postId
-                }
-                let cellTopOffset = tableView.rectForRow(at: anchorIndexPath).minY - tableView.contentOffset.y
-                earlierLoadAnchor = (postId: anchorId, cellTopOffset: cellTopOffset)
+        guard scrollView.contentOffset.y <= contentTop + 200 else { return }
+        // Disarm immediately; re-armed only on the next `willBeginDragging`.
+        loadEarlierArmed = false
+
+        debugLog("[loadEarlier] trigger contentOffset.y=\(scrollView.contentOffset.y) topInset=\(scrollView.adjustedContentInset.top)")
+        let token = enterPaginationContext(.loadingEarlier)
+        Task {
+            let added = await viewModel.loadEarlierPosts(containerWidth: view.bounds.width)
+            debugLog("[loadEarlier] returned addedCount=\(added.count) addedIds=\(added.prefix(3))…")
+            // Bail if a jump (or another window-replacing flow) overtook us:
+            // the VM's loadGeneration check already returned [], but without
+            // this guard we'd still clobber the newer flow's paginationContext
+            // back to .idle and let updateUI apply an intermediate snapshot.
+            guard paginationTokenIsCurrent(token) else { return }
+            guard !added.isEmpty else {
+                endPaginationContext(token)
+                return
             }
-            isLoadingEarlierLocally = true
-            Task {
-                await viewModel.loadEarlierPosts(containerWidth: view.bounds.width)
-                // updateUI (triggered by @Observable) will handle position restoration
+            // Defer the snapshot apply until the scroll view is fully settled.
+            // Applying mid-drag or mid-deceleration loses the anchor because
+            // either the pan recognizer (during drag) or residual velocity
+            // (during decel) immediately overrides our restored contentOffset.
+            // The trigger gate stays disarmed and `paginationContext` stays
+            // `.loadingEarlier` while pending, so another trigger can't fire.
+            if tableView.isDragging || tableView.isDecelerating || tableView.isTracking {
+                debugLog("[loadEarlier] deferring apply — scroll not settled (dragging=\(tableView.isDragging) decelerating=\(tableView.isDecelerating) tracking=\(tableView.isTracking))")
+                pendingLoadEarlier = (added, token)
+            } else {
+                applyLoadEarlierSnapshot(addedPostIds: added)
+                endPaginationContext(token)
             }
         }
+    }
+
+    /// Run a queued load-earlier apply once the scroll view is fully settled.
+    /// Hooked from `scrollViewDidEndDragging` (no-decel path) and
+    /// `scrollViewDidEndDecelerating`. Reentrant-safe — the pending value is
+    /// cleared first so a nested settle event can't double-apply.
+    private func flushPendingLoadEarlierIfReady() {
+        guard let pending = pendingLoadEarlier,
+              paginationTokenIsCurrent(pending.token),
+              !tableView.isDragging,
+              !tableView.isDecelerating,
+              !tableView.isTracking
+        else { return }
+        pendingLoadEarlier = nil
+        debugLog("[loadEarlier] flushing pending apply — scroll settled")
+        applyLoadEarlierSnapshot(addedPostIds: pending.addedPostIds)
+        endPaginationContext(pending.token)
     }
 
     func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath) {
@@ -1410,13 +1776,31 @@ extension TopicDetailViewController: UITableViewDelegate {
         // Load more (forward) — trigger on the last row so the spinner is visible.
         // In reverse mode the bottom of the table is the oldest non-OP loaded
         // post, so what the user wants next is canonically *earlier* posts.
-        if indexPath.row >= totalRows - 1 {
+        guard indexPath.row >= totalRows - 1,
+              case .idle = paginationContext
+        else { return }
+        if viewModel.isReverseOrder {
+            // Treat reverse-mode "scroll to bottom" as a load-earlier, but
+            // without the anchor (we're appending visually in reverse, so the
+            // user's current view doesn't shift) — preserve contentOffset.
+            let token = enterPaginationContext(.loadingMore)
             Task {
-                if viewModel.isReverseOrder {
-                    await viewModel.loadEarlierPosts(containerWidth: view.bounds.width)
-                } else {
-                    await viewModel.loadMorePosts(containerWidth: view.bounds.width)
+                let added = await viewModel.loadEarlierPosts(containerWidth: view.bounds.width)
+                guard paginationTokenIsCurrent(token) else { return }
+                if !added.isEmpty {
+                    applyLoadMoreSnapshot(addedPostIds: added)
                 }
+                endPaginationContext(token)
+            }
+        } else {
+            let token = enterPaginationContext(.loadingMore)
+            Task {
+                let added = await viewModel.loadMorePosts(containerWidth: view.bounds.width)
+                guard paginationTokenIsCurrent(token) else { return }
+                if !added.isEmpty {
+                    applyLoadMoreSnapshot(addedPostIds: added)
+                }
+                endPaginationContext(token)
             }
         }
     }
@@ -1435,14 +1819,39 @@ extension TopicDetailViewController: UITableViewDelegate {
     // The pending flush is cancelled if the user starts scrolling again before it fires.
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
         scheduleDebouncedReadFlush()
+        flushPendingLoadEarlierIfReady()
     }
 
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
-        if !decelerate { scheduleDebouncedReadFlush() }
+        if !decelerate {
+            scheduleDebouncedReadFlush()
+            flushPendingLoadEarlierIfReady()
+        }
     }
 
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         cancelPendingReadFlush()
+        // The user is taking over — drop any in-flight fast-path scroll so the
+        // animated jump doesn't keep gating load-earlier and the next user
+        // scroll-up can paginate immediately.
+        if let token = fastPathScrollToken {
+            fastPathScrollToken = nil
+            endPaginationContext(token)
+        }
+        // Re-arm load-earlier on every new drag. Disarmed once per drag inside
+        // `scrollViewDidScroll`; this is the single point that gives the user
+        // a fresh shot for the next gesture.
+        loadEarlierArmed = true
+    }
+
+    func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
+        // Fast-path jump finished — release the `.jumping` gate it took so
+        // legitimate user scrolls can resume triggering load-earlier.
+        if let token = fastPathScrollToken {
+            fastPathScrollToken = nil
+            endPaginationContext(token)
+        }
+        lastScrollOffset = scrollView.contentOffset.y
     }
 }
 
@@ -1645,14 +2054,8 @@ extension TopicDetailViewController: PostCellDelegate {
         composer.onPostCreated = { [weak self] _, newPostNumber in
             guard let self else { return }
             self.pendingScrollIndexPath = nil
-            self.earlierLoadAnchor = nil
-            self.contentViewCache.removeAll()
-            self.cellHeightCache.removeAll()
-            self.precomputedBlockHeights.removeAll()
-            self.precomputedTotalHeights.removeAll()
-            // Land the new reply at the bottom of the screen when the
-            // jump-target scroll consumes this position.
-            self.nextJumpPosition = .bottom
+            self.invalidateRenderCaches()
+            let token = self.enterPaginationContext(.jumping)
             Task { [weak self] in
                 guard let self else { return }
                 await self.viewModel.loadTopic(
@@ -1660,6 +2063,11 @@ extension TopicDetailViewController: PostCellDelegate {
                     containerWidth: self.view.bounds.width,
                     nearPostNumber: newPostNumber
                 )
+                guard self.paginationTokenIsCurrent(token) else { return }
+                // Land the new reply at the bottom of the screen so the
+                // composer's last visible content stays in focus.
+                self.applyJumpSnapshot(target: newPostNumber, position: .bottom)
+                self.endPaginationContext(token)
             }
         }
         let nav = UINavigationController(rootViewController: composer)

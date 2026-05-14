@@ -1,15 +1,22 @@
 import UIKit
 
 protocol TopicDetailBottomBarDelegate: AnyObject {
-    func bottomBarDidTapScrollToTop()
     func bottomBarDidTapOPOnly()
     func bottomBarDidTapJumpToFloor()
     func bottomBarDidToggleReverseOrder()
     func bottomBarDidToggleSummaryMode()
     func bottomBarDidTapReply()
-    /// Whether the reverse / summary modes are currently active (for menu state).
+    /// Whether the reverse / summary modes are currently active.
     var bottomBarIsReverseOrder: Bool { get }
     var bottomBarIsSummaryMode: Bool { get }
+
+    /// Long-press on the jump-to-floor button begins a continuous scrub gesture.
+    /// The bar forwards every state change (begin/change/end) so the VC can
+    /// drive the overlay floor in real time without the user ever having to
+    /// lift their finger. Locations are in the window's coordinate space.
+    func bottomBarDidBeginScrubFromJump(at locationInWindow: CGPoint, buttonFrame: CGRect)
+    func bottomBarDidUpdateScrub(at locationInWindow: CGPoint)
+    func bottomBarDidEndScrub(cancelled: Bool)
 }
 
 final class TopicDetailBottomBar: UIView {
@@ -17,13 +24,12 @@ final class TopicDetailBottomBar: UIView {
 
     private static let buttonSize: CGFloat = 44
 
-    private lazy var scrollToTopButton = makeCircularButton(icon: "arrow.up", a11yLabel: String(localized: "topic.bottombar.scroll_to_top"))
     private(set) lazy var opOnlyButton = makeCircularButton(icon: "person", a11yLabel: String(localized: "topic.bottombar.op_only"))
     private lazy var jumpToFloorButton = makeCircularButton(icon: "number", a11yLabel: String(localized: "topic.bottombar.jump_to_floor"))
     private lazy var replyButton = makeCircularButton(icon: "arrowshape.turn.up.left", a11yLabel: String(localized: "reply.title"))
 
     private lazy var stackView: UIStackView = {
-        let sv = UIStackView(arrangedSubviews: [scrollToTopButton, opOnlyButton, jumpToFloorButton, replyButton])
+        let sv = UIStackView(arrangedSubviews: [opOnlyButton, jumpToFloorButton, replyButton])
         sv.axis = .horizontal
         sv.spacing = 12
         sv.alignment = .center
@@ -38,15 +44,23 @@ final class TopicDetailBottomBar: UIView {
 
         addSubview(stackView)
 
-        scrollToTopButton.addTarget(self, action: #selector(scrollToTopTapped), for: .touchUpInside)
         opOnlyButton.addTarget(self, action: #selector(opOnlyTapped), for: .touchUpInside)
         jumpToFloorButton.addTarget(self, action: #selector(jumpToFloorTapped), for: .touchUpInside)
         replyButton.addTarget(self, action: #selector(replyTapped), for: .touchUpInside)
 
-        // Long-press menu on jump-to-floor: tap still fires touchUpInside
-        // (showsMenuAsPrimaryAction = false), long-press opens the menu.
-        jumpToFloorButton.showsMenuAsPrimaryAction = false
-        jumpToFloorButton.menu = makeJumpMenu()
+        // Long-press + drag the jump button to scrub through floors. We don't
+        // require an initial movement, so the gesture begins after a short
+        // hold; subsequent movement is reported via the same recognizer.
+        let scrubGesture = UILongPressGestureRecognizer(
+            target: self,
+            action: #selector(handleScrubGesture(_:))
+        )
+        scrubGesture.minimumPressDuration = 0.22
+        // The default `allowableMovement` (10pt) cancels the gesture if the
+        // user moves before recognition — but they may rest a finger then
+        // immediately drag, which is exactly the scrub flow we want.
+        scrubGesture.allowableMovement = .greatestFiniteMagnitude
+        jumpToFloorButton.addGestureRecognizer(scrubGesture)
 
         let size = Self.buttonSize
         NSLayoutConstraint.activate([
@@ -55,8 +69,6 @@ final class TopicDetailBottomBar: UIView {
             stackView.trailingAnchor.constraint(equalTo: trailingAnchor),
             stackView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
-            scrollToTopButton.widthAnchor.constraint(equalToConstant: size),
-            scrollToTopButton.heightAnchor.constraint(equalToConstant: size),
             opOnlyButton.widthAnchor.constraint(equalToConstant: size),
             opOnlyButton.heightAnchor.constraint(equalToConstant: size),
             jumpToFloorButton.widthAnchor.constraint(equalToConstant: size),
@@ -156,10 +168,6 @@ final class TopicDetailBottomBar: UIView {
 
     // MARK: - Actions
 
-    @objc private func scrollToTopTapped() {
-        delegate?.bottomBarDidTapScrollToTop()
-    }
-
     @objc private func opOnlyTapped() {
         delegate?.bottomBarDidTapOPOnly()
     }
@@ -168,34 +176,30 @@ final class TopicDetailBottomBar: UIView {
         delegate?.bottomBarDidTapJumpToFloor()
     }
 
-    /// Refresh the long-press menu so checkmarks reflect current modes.
-    func refreshJumpMenu() {
-        jumpToFloorButton.menu = makeJumpMenu()
-    }
-
-    private func makeJumpMenu() -> UIMenu {
-        let isReverse = delegate?.bottomBarIsReverseOrder ?? false
-        let isSummary = delegate?.bottomBarIsSummaryMode ?? false
-        let reverseAction = UIAction(
-            title: String(localized: "topic.bottombar.reverse_order"),
-            image: UIImage(systemName: "arrow.up.arrow.down"),
-            state: isReverse ? .on : .off
-        ) { [weak self] _ in
-            self?.delegate?.bottomBarDidToggleReverseOrder()
-            self?.refreshJumpMenu()
-        }
-        let summaryAction = UIAction(
-            title: String(localized: "topic.bottombar.summary_view"),
-            image: UIImage(systemName: "flame"),
-            state: isSummary ? .on : .off
-        ) { [weak self] _ in
-            self?.delegate?.bottomBarDidToggleSummaryMode()
-            self?.refreshJumpMenu()
-        }
-        return UIMenu(title: "", children: [reverseAction, summaryAction])
-    }
+    /// No-op since the long-press menu was replaced by the scrubber gesture;
+    /// retained as a hook for callers that still ping it after mode toggles.
+    func refreshJumpMenu() {}
 
     @objc private func replyTapped() {
         delegate?.bottomBarDidTapReply()
+    }
+
+    @objc private func handleScrubGesture(_ gesture: UILongPressGestureRecognizer) {
+        let locationInWindow = gesture.location(in: nil)
+        switch gesture.state {
+        case .began:
+            delegate?.bottomBarDidBeginScrubFromJump(
+                at: locationInWindow,
+                buttonFrame: jumpToFloorButton.convert(jumpToFloorButton.bounds, to: self)
+            )
+        case .changed:
+            delegate?.bottomBarDidUpdateScrub(at: locationInWindow)
+        case .ended:
+            delegate?.bottomBarDidEndScrub(cancelled: false)
+        case .cancelled, .failed:
+            delegate?.bottomBarDidEndScrub(cancelled: true)
+        default:
+            break
+        }
     }
 }

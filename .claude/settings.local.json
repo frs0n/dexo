@@ -45,7 +45,17 @@
       "Bash(git commit -m ' *)",
       "Bash(git commit *)",
       "Bash(git log *)",
-      "mcp__xcodebuildmcp__discover_projs"
+      "mcp__xcodebuildmcp__discover_projs",
+      "mcp__xcodebuildmcp__get_sim_app_path",
+      "mcp__xcodebuildmcp__install_app_sim",
+      "mcp__xcodebuildmcp__open_sim",
+      "mcp__xcodebuildmcp__launch_app_sim",
+      "Bash(axe --help)",
+      "mcp__xcodebuildmcp__start_sim_log_cap",
+      "Bash(axe swipe *)",
+      "Bash(axe touch *)",
+      "Bash(axe key *)",
+      "mcp__xcodebuildmcp__stop_sim_log_cap"
     ]
   },
   "enabledMcpjsonServers": [

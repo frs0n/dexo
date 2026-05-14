@@ -10,7 +10,7 @@ final class PinnedTopicBar: UIView {
         let iconColor: UIColor?
     }
 
-    static let height: CGFloat = 40
+    static let height: CGFloat = 50
 
     var onSelect: ((Int) -> Void)?
 

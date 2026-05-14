@@ -65,6 +65,22 @@
         }
       }
     },
+    "action.more" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "More"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更多"
+          }
+        }
+      }
+    },
     "action.no_thanks" : {
       "localizations" : {
         "en" : {
@@ -93,166 +109,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "好的"
-          }
-        }
-      }
-    },
-    "action.more" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "More"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "更多"
-          }
-        }
-      }
-    },
-    "post.a11y.like" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Like"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "点赞"
-          }
-        }
-      }
-    },
-    "post.a11y.liked" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Liked"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已点赞"
-          }
-        }
-      }
-    },
-    "post.a11y.boost" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Boost"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "推荐"
-          }
-        }
-      }
-    },
-    "post.a11y.reaction %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "React with %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "用 %@ 反应"
-          }
-        }
-      }
-    },
-    "topic.bottombar.scroll_to_top" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Scroll to top"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "回到顶部"
-          }
-        }
-      }
-    },
-    "topic.bottombar.op_only" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Original poster only"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "仅看楼主"
-          }
-        }
-      }
-    },
-    "topic.bottombar.jump_to_floor" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Jump to floor"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "跳转楼层"
-          }
-        }
-      }
-    },
-    "topic.bottombar.reverse_order" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reverse order"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "倒序查看"
-          }
-        }
-      }
-    },
-    "topic.bottombar.summary_view" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "By heat"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "按热度查看"
           }
         }
       }
@@ -1320,22 +1176,6 @@
         }
       }
     },
-    "home.sort.accessibility.label" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sort topics"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "排序方式"
-          }
-        }
-      }
-    },
     "home.login_prompt" : {
       "localizations" : {
         "en" : {
@@ -1348,6 +1188,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "登录后浏览此论坛"
+          }
+        }
+      }
+    },
+    "home.sort.accessibility.label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sort topics"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "排序方式"
           }
         }
       }
@@ -1512,22 +1368,6 @@
         }
       }
     },
-    "me.read" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Read"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已读"
-          }
-        }
-      }
-    },
     "me.bookmarks.empty" : {
       "localizations" : {
         "en" : {
@@ -1672,6 +1512,22 @@
         }
       }
     },
+    "me.read" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已读"
+          }
+        }
+      }
+    },
     "me.stats.days" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1810,38 +1666,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld posts"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 条回复"
-          }
-        }
-      }
-    },
-    "topic.cell.a11y.pinned %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pinned: %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "置顶:%@"
-          }
-        }
-      }
-    },
-    "topic.cell.a11y.replies %lld" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld replies"
           }
         },
         "zh-Hans" : {
@@ -2075,6 +1899,70 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "提交投票"
+          }
+        }
+      }
+    },
+    "post.a11y.boost" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Boost"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推荐"
+          }
+        }
+      }
+    },
+    "post.a11y.like" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Like"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点赞"
+          }
+        }
+      }
+    },
+    "post.a11y.liked" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Liked"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已点赞"
+          }
+        }
+      }
+    },
+    "post.a11y.reaction %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "React with %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用 %@ 反应"
           }
         }
       }
@@ -3471,6 +3359,7 @@
       }
     },
     "topic_detail.jump.message %lld" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3482,6 +3371,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "输入楼层号 (1-%lld)"
+          }
+        }
+      }
+    },
+    "topic_detail.jump.shortcut_first" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1#"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1#"
+          }
+        }
+      }
+    },
+    "topic_detail.jump.shortcut_last" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "末楼"
+          }
+        }
+      }
+    },
+    "topic_detail.jump.shortcut_unread" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unread"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未读"
           }
         }
       }
@@ -3515,6 +3452,119 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "加载中"
+          }
+        }
+      }
+    },
+    "topic.bottombar.jump_to_floor" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jump to floor"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳转楼层"
+          }
+        }
+      }
+    },
+    "topic.bottombar.op_only" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Original poster only"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅看楼主"
+          }
+        }
+      }
+    },
+    "topic.bottombar.reverse_order" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reverse order"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "倒序查看"
+          }
+        }
+      }
+    },
+    "topic.bottombar.scroll_to_top" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scroll to top"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回到顶部"
+          }
+        }
+      }
+    },
+    "topic.bottombar.summary_view" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "By heat"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按热度查看"
+          }
+        }
+      }
+    },
+    "topic.cell.a11y.pinned %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pinned: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "置顶:%@"
+          }
+        }
+      }
+    },
+    "topic.cell.a11y.replies %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld replies"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 条回复"
           }
         }
       }

@@ -15,8 +15,6 @@ final class TopicDetailViewModel {
     var isFilteringByOP = false
     var isReverseOrder = false
     var isSummaryMode = false
-    var isJumping = false
-    var jumpTargetFloor: Int?
     var expandedBoostPostIds: Set<Int> = []
     var errorMessage: String?
 
@@ -98,15 +96,23 @@ final class TopicDetailViewModel {
         return posts.firstIndex(where: { $0.id == targetId })
     }
 
-    /// Find the row index in `visiblePosts` for a given floor (1-based post number)
+    /// Find the row index in `visiblePosts` for a given floor (1-based index
+    /// into `allPostIds`). We match by post ID rather than `postNumber` because
+    /// the two can diverge — gaps from deletions, action-only posts, or any
+    /// stream reordering — and the fast-path scroll only works if it finds the
+    /// exact post that lives at `allPostIds[floor - 1]`.
     func visibleRowForFloor(_ floor: Int) -> Int? {
-        return visiblePosts.firstIndex(where: { $0.postNumber == floor })
+        let index = floor - 1
+        guard index >= 0, index < allPostIds.count else { return nil }
+        let targetId = allPostIds[index]
+        return visiblePosts.firstIndex(where: { $0.id == targetId })
     }
 
     /// Loads the topic. When `nearPostNumber > 1` is supplied, the initial batch
     /// returned by Discourse is centered on that floor — saving a second round-trip
     /// for deep-link entries (notification tap, reply link, direct URL).
-    /// `jumpTargetFloor` is set so the VC scrolls to the right floor on first layout.
+    /// The caller is responsible for scrolling to `nearPostNumber` after the
+    /// returned posts settle.
     func loadTopic(id: Int, containerWidth: CGFloat, nearPostNumber: Int? = nil) async {
         isLoading = true
         isReady = false
@@ -159,11 +165,6 @@ final class TopicDetailViewModel {
                 parseAndStore(post: post)
             }
 
-            // When we fetched near a specific floor, tell the VC to scroll there.
-            if let nearPostNumber, nearPostNumber > 1 {
-                jumpTargetFloor = nearPostNumber
-            }
-
             // Force updateUI to re-run even if isReady was already true.
             // Upstream mutations (topic, parsedBlocks, etc.) only fire the first
             // tracked change per observation cycle; re-assigning isReady guarantees
@@ -213,7 +214,6 @@ final class TopicDetailViewModel {
         }
 
         isReverseOrder = true
-        isJumping = true
         loadGeneration &+= 1
         topic?.postStream.posts.removeAll()
         parsedBlocks.removeAll()
@@ -242,138 +242,124 @@ final class TopicDetailViewModel {
             errorMessage = error.localizedDescription
         }
 
-        isJumping = false
         if isReady { isReady = false }
         isReady = true
     }
 
-    func loadMorePosts(containerWidth: CGFloat) async {
-        guard !isLoadingMore, canLoadMore, let topicId = topic?.id else { return }
+    /// Appends the next batch of posts at the end of the loaded window.
+    /// Returns the IDs of newly inserted posts (empty if no-op / failure /
+    /// stale-window discard). The caller can use the returned IDs to drive
+    /// height pre-computation and partial snapshot updates.
+    @discardableResult
+    func loadMorePosts(containerWidth: CGFloat) async -> [Int] {
+        guard !isLoadingMore, canLoadMore, let topicId = topic?.id else { return [] }
         isLoadingMore = true
+        defer { isLoadingMore = false }
 
         let capturedGeneration = loadGeneration
         let newEnd = min(loadedRangeEnd + 20, allPostIds.count)
         let batch = Array(allPostIds[loadedRangeEnd..<newEnd])
+        guard !batch.isEmpty else { return [] }
 
-        guard !batch.isEmpty else {
-            isLoadingMore = false
-            return
-        }
-
+        let response: DiscourseTopicPostsResponse
         do {
-            let response = try await api.fetchTopicPosts(topicId: topicId, postIds: batch)
-
-            // Window was reset while this request was in flight (jumpToFloor,
-            // reverse-order, summary toggle, topic reload). Discard the response
-            // so we don't merge posts from the old window into the new one.
-            guard loadGeneration == capturedGeneration else {
-                isLoadingMore = false
-                return
-            }
-
-            let newPosts = response.postStream.posts.filter { !loadedPostIds.contains($0.id) }
-
-            guard !newPosts.isEmpty else {
-                for id in batch { loadedPostIds.insert(id) }
-                loadedRangeEnd = newEnd
-                isLoadingMore = false
-                return
-            }
-
-            // Sort new posts by their order in allPostIds
-            let idOrder = Dictionary(uniqueKeysWithValues: allPostIds.enumerated().map { ($1, $0) })
-            let sortedPosts = newPosts.sorted { (idOrder[$0.id] ?? 0) < (idOrder[$1.id] ?? 0) }
-
-            topic?.postStream.posts.append(contentsOf: sortedPosts)
-
-            for post in sortedPosts {
-                loadedPostIds.insert(post.id)
-                parseAndStore(post: post)
-            }
-
-            loadedRangeEnd = newEnd
+            response = try await api.fetchTopicPosts(topicId: topicId, postIds: batch)
         } catch {
-            // Silently fail; user can scroll again to retry
+            return []
         }
 
-        isLoadingMore = false
+        // Window reset while in flight — discard rather than splice old posts
+        // into a fresh window.
+        guard loadGeneration == capturedGeneration else { return [] }
+
+        let newPosts = response.postStream.posts.filter { !loadedPostIds.contains($0.id) }
+        guard !newPosts.isEmpty else {
+            for id in batch { loadedPostIds.insert(id) }
+            loadedRangeEnd = newEnd
+            return []
+        }
+
+        let idOrder = Dictionary(uniqueKeysWithValues: allPostIds.enumerated().map { ($1, $0) })
+        let sortedPosts = newPosts.sorted { (idOrder[$0.id] ?? 0) < (idOrder[$1.id] ?? 0) }
+        topic?.postStream.posts.append(contentsOf: sortedPosts)
+        for post in sortedPosts {
+            loadedPostIds.insert(post.id)
+            parseAndStore(post: post)
+        }
+        loadedRangeEnd = newEnd
+        return sortedPosts.map(\.id)
     }
 
-    func loadEarlierPosts(containerWidth: CGFloat) async {
-        guard canLoadEarlier, !isLoadingEarlier, let topicId = topic?.id else { return }
+    /// Prepends the previous batch of posts at the front of the loaded window.
+    /// Returns the IDs of newly inserted posts (in stream order) — the VC uses
+    /// these to pre-compute heights synchronously before applying the snapshot,
+    /// keeping the user's reading position visually anchored.
+    @discardableResult
+    func loadEarlierPosts(containerWidth: CGFloat) async -> [Int] {
+        guard canLoadEarlier, !isLoadingEarlier, let topicId = topic?.id else { return [] }
         isLoadingEarlier = true
+        defer { isLoadingEarlier = false }
 
         let capturedGeneration = loadGeneration
         let newStart = max(0, loadedRangeStart - 20)
         let batch = Array(allPostIds[newStart..<loadedRangeStart])
+        guard !batch.isEmpty else { return [] }
 
-        guard !batch.isEmpty else {
-            isLoadingEarlier = false
-            return
-        }
-
+        let response: DiscourseTopicPostsResponse
         do {
-            let response = try await api.fetchTopicPosts(topicId: topicId, postIds: batch)
-
-            // Window was reset while this request was in flight — discard, or
-            // the stale batch gets inserted in front of whatever the reset
-            // loaded (e.g. floors N-20..N-1 prepended before floor 1 after
-            // jumping to the OP).
-            guard loadGeneration == capturedGeneration else {
-                isLoadingEarlier = false
-                return
-            }
-
-            let newPosts = response.postStream.posts.filter { !loadedPostIds.contains($0.id) }
-
-            guard !newPosts.isEmpty else {
-                for id in batch { loadedPostIds.insert(id) }
-                loadedRangeStart = newStart
-                isLoadingEarlier = false
-                return
-            }
-
-            // Sort new posts by their order in allPostIds
-            let idOrder = Dictionary(uniqueKeysWithValues: allPostIds.enumerated().map { ($1, $0) })
-            let sortedPosts = newPosts.sorted { (idOrder[$0.id] ?? 0) < (idOrder[$1.id] ?? 0) }
-
-            // Insert after the pinned first post (index 1) if it exists, otherwise at 0
-            let insertIndex: Int
-            if loadedRangeStart > 0, let fp = firstPost, posts.first?.id == fp.id {
-                insertIndex = 1
-            } else {
-                insertIndex = 0
-            }
-            topic?.postStream.posts.insert(contentsOf: sortedPosts, at: insertIndex)
-
-            for post in sortedPosts {
-                loadedPostIds.insert(post.id)
-                parseAndStore(post: post)
-            }
-
-            loadedRangeStart = newStart
+            response = try await api.fetchTopicPosts(topicId: topicId, postIds: batch)
         } catch {
-            // Silently fail; user can scroll again to retry
+            return []
         }
 
-        isLoadingEarlier = false
+        guard loadGeneration == capturedGeneration else { return [] }
+
+        let newPosts = response.postStream.posts.filter { !loadedPostIds.contains($0.id) }
+        guard !newPosts.isEmpty else {
+            for id in batch { loadedPostIds.insert(id) }
+            loadedRangeStart = newStart
+            return []
+        }
+
+        let idOrder = Dictionary(uniqueKeysWithValues: allPostIds.enumerated().map { ($1, $0) })
+        let sortedPosts = newPosts.sorted { (idOrder[$0.id] ?? 0) < (idOrder[$1.id] ?? 0) }
+
+        // In reverse-order mode the OP sits pinned at index 0; everything else
+        // gets inserted after it. In canonical mode posts are prepended at 0.
+        let insertIndex: Int
+        if let fp = firstPost, posts.first?.id == fp.id {
+            insertIndex = 1
+        } else {
+            insertIndex = 0
+        }
+        topic?.postStream.posts.insert(contentsOf: sortedPosts, at: insertIndex)
+        for post in sortedPosts {
+            loadedPostIds.insert(post.id)
+            parseAndStore(post: post)
+        }
+        loadedRangeStart = newStart
+        return sortedPosts.map(\.id)
     }
 
-    func jumpToFloor(_ floor: Int, containerWidth: CGFloat) async {
-        guard !allPostIds.isEmpty, let topicId = topic?.id else { return }
+    /// Replaces the loaded window with a fresh batch starting at `floor`.
+    /// The caller is responsible for scrolling to the target floor once this
+    /// returns (or showing/hiding any loading overlay). Returns `true` on
+    /// success, `false` if the API call failed.
+    @discardableResult
+    func jumpToFloor(_ floor: Int, containerWidth: CGFloat) async -> Bool {
+        guard !allPostIds.isEmpty, let topicId = topic?.id else { return false }
 
         let targetIndex = max(0, min(floor - 1, allPostIds.count - 1))
-        let startIndex = targetIndex
-        let endIndex = min(startIndex + 20, allPostIds.count)
-        let batch = Array(allPostIds[startIndex..<endIndex])
+        let endIndex = min(targetIndex + 20, allPostIds.count)
+        let batch = Array(allPostIds[targetIndex..<endIndex])
+        guard !batch.isEmpty else { return false }
 
-        guard !batch.isEmpty else { return }
-
-        isJumping = true
-        jumpTargetFloor = floor
         loadGeneration &+= 1
 
-        // Clear current posts
+        // Clear current posts. `isReady` stays `true` through the gap — the VC
+        // suppresses snapshot application during a jump via its own
+        // PaginationContext, so the brief "empty visiblePosts" state never
+        // reaches the table view.
         topic?.postStream.posts.removeAll()
         parsedBlocks.removeAll()
         postsById.removeAll()
@@ -382,34 +368,27 @@ final class TopicDetailViewModel {
 
         do {
             let response = try await api.fetchTopicPosts(topicId: topicId, postIds: batch)
-
-            // Sort by stream order
             let idOrder = Dictionary(uniqueKeysWithValues: allPostIds.enumerated().map { ($1, $0) })
             let sortedPosts = response.postStream.posts.sorted { (idOrder[$0.id] ?? 0) < (idOrder[$1.id] ?? 0) }
-
             topic?.postStream.posts = sortedPosts
-
             for post in sortedPosts {
                 loadedPostIds.insert(post.id)
                 parseAndStore(post: post)
             }
-
-            loadedRangeStart = startIndex
+            loadedRangeStart = targetIndex
             loadedRangeEnd = endIndex
         } catch {
             debugLog("[TopicDetail] Jump failed: \(error)")
             errorMessage = error.localizedDescription
-            jumpTargetFloor = nil
+            return false
         }
 
-        isJumping = false
-        if isReady {
-            // Force updateUI to re-run even if isReady was already true
-            isReady = false
-            isReady = true
-        } else {
-            isReady = true
-        }
+        // Toggle `isReady` so the VC's updateUI re-fires for any non-jump
+        // observers (e.g. title bar) — the actual snapshot apply is driven by
+        // the VC's pagination flow after this `await` returns.
+        if isReady { isReady = false }
+        isReady = true
+        return true
     }
 
     func appendBoost(_ boost: DiscourseTopicDetail.Boost, toPostId postId: Int) {

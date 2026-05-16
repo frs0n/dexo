@@ -3300,6 +3300,22 @@
         }
       }
     },
+    "time.just_now" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Just now"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刚刚"
+          }
+        }
+      }
+    },
     "topic_detail.bar.jump_to_floor" : {
       "localizations" : {
         "en" : {

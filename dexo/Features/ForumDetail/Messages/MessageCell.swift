@@ -145,8 +145,12 @@ final class MessageCell: UITableViewCell {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         guard let date = formatter.date(from: isoString) else { return isoString }
+        let now = Date()
+        if abs(date.timeIntervalSince(now)) < 5 {
+            return String(localized: "time.just_now")
+        }
         let relative = RelativeDateTimeFormatter()
         relative.unitsStyle = .abbreviated
-        return relative.localizedString(for: date, relativeTo: Date())
+        return relative.localizedString(for: date, relativeTo: now)
     }
 }

@@ -269,6 +269,10 @@ final class TopicCell: UITableViewCell {
 
     private static func formatDate(_ isoString: String) -> String {
         guard let date = isoFormatter.date(from: isoString) else { return isoString }
-        return relativeFormatter.localizedString(for: date, relativeTo: Date())
+        let now = Date()
+        if abs(date.timeIntervalSince(now)) < 5 {
+            return String(localized: "time.just_now")
+        }
+        return relativeFormatter.localizedString(for: date, relativeTo: now)
     }
 }

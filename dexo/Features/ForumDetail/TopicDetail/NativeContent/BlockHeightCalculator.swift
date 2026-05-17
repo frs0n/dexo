@@ -181,9 +181,12 @@ enum BlockHeightCalculator {
                 config: config
             )
 
-        // Block types whose height we can't yet predict accurately:
+        // Block types whose height we can't predict accurately:
+        // - table: cells lay out at column widths whose UILabel-resolved
+        //   heights don't reliably match `boundingRect` (off by ~10pt for
+        //   CJK-heavy content). The renderer hands back a scroll view that
+        //   self-sizes via constraints, so autosize works correctly.
         // - details: expand toggle changes height; needs explicit invalidation
-        // - table: arbitrarily complex grid layout
         // - poll: needs per-vote runtime data via pollProvider
         // - rawHTML: opaque fallback, not safe to precompute
         case .table,

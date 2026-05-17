@@ -392,22 +392,6 @@
     "cache.image_count %lld" : {
 
     },
-    "cache.other" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Other"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "其他缓存"
-          }
-        }
-      }
-    },
     "cache.image_count %llu" : {
       "localizations" : {
         "en" : {
@@ -420,6 +404,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%llu 张缓存图片"
+          }
+        }
+      }
+    },
+    "cache.other" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Other"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "其他缓存"
           }
         }
       }
@@ -660,6 +661,70 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "登录后浏览分类"
+          }
+        }
+      }
+    },
+    "challenge.done" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完成"
+          }
+        }
+      }
+    },
+    "challenge.prompt.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The forum returned a 403. You may need to pass the Cloudflare challenge before continuing."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "操作被拒绝（403）。可能需要先过盾后再继续。"
+          }
+        }
+      }
+    },
+    "challenge.prompt.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pass Challenge?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要过盾"
+          }
+        }
+      }
+    },
+    "challenge.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pass Challenge"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "过盾"
           }
         }
       }
@@ -1400,86 +1465,6 @@
         }
       }
     },
-    "me.joined_date %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Joined %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "加入于 %@"
-          }
-        }
-      }
-    },
-    "challenge.prompt.message" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The forum returned a 403. You may need to pass the Cloudflare challenge before continuing."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "操作被拒绝（403）。可能需要先过盾后再继续。"
-          }
-        }
-      }
-    },
-    "challenge.prompt.title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pass Challenge?"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "需要过盾"
-          }
-        }
-      }
-    },
-    "challenge.done" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Done"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "完成"
-          }
-        }
-      }
-    },
-    "challenge.title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pass Challenge"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "过盾"
-          }
-        }
-      }
-    },
     "me.challenge" : {
       "localizations" : {
         "en" : {
@@ -1492,6 +1477,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "过盾"
+          }
+        }
+      }
+    },
+    "me.joined_date %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Joined %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加入于 %@"
           }
         }
       }
@@ -2924,6 +2925,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "点击揭示"
+          }
+        }
+      }
+    },
+    "table.expand" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View table fullscreen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "横屏全屏查看表格"
           }
         }
       }

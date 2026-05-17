@@ -36,4 +36,12 @@ final class MainTabBarController: UITabBarController {
     @objc private func themeDidChange() {
         tabBar.tintColor = ThemeManager.shared.accentColor
     }
+
+    // The app is portrait-only at the root. Landscape is opted into per-VC
+    // (currently just `TableFullscreenViewController`) — those VCs override
+    // their own `supportedInterfaceOrientations` and iOS honors the modally
+    // presented VC's preferences over ours.
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        traitCollection.userInterfaceIdiom == .pad ? .all : .portrait
+    }
 }

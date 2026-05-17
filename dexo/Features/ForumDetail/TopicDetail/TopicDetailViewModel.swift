@@ -50,8 +50,14 @@ final class TopicDetailViewModel {
         postsById = Dictionary(posts.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
     }
 
+    /// OP's username. Sourced from the cached `firstPost` (set when post 1 is
+    /// loaded). Returns `nil` rather than guessing from `posts.first` — when the
+    /// loaded window doesn't include post 1 (entry via search/notification, or
+    /// after a reply lands deep in the stream), the top of the batch is some
+    /// random middle post and treating its author as the OP marks the wrong
+    /// cells. Better to show no OP badge than the wrong one.
     var opUsername: String? {
-        firstPost?.username ?? posts.first?.username
+        firstPost?.username
     }
 
     var visiblePosts: [DiscourseTopicDetail.Post] {
@@ -119,8 +125,16 @@ final class TopicDetailViewModel {
         errorMessage = nil
         parsedBlocks = [:]
         postsById = [:]
+        let isNewTopic = lastLoadedTopicId != id
         lastLoadedTopicId = id
         loadGeneration &+= 1
+        // Different topic = different OP; drop any cached value so we don't
+        // carry the previous topic's OP into this one. Same-topic reloads
+        // (summary toggle, post-reply refresh) leave it alone — preserved
+        // below if the new batch doesn't itself contain post 1.
+        if isNewTopic {
+            firstPost = nil
+        }
         let filter = isSummaryMode ? "summary" : nil
         do {
             let detail = try await api.fetchTopic(id: id, nearPostNumber: nearPostNumber, filter: filter)
@@ -130,12 +144,14 @@ final class TopicDetailViewModel {
             allPostIds = detail.postStream.stream ?? detail.postStream.posts.map(\.id)
             loadedPostIds = Set(detail.postStream.posts.map(\.id))
 
-            // Cache the first post (OP) — only when the batch actually starts from
-            // post 1. With `near_post_number`, the batch is centered elsewhere and
-            // `posts.first` is not the OP.
-            firstPost = (detail.postStream.posts.first?.postNumber == 1)
-                ? detail.postStream.posts.first
-                : nil
+            // Cache the OP only when the batch actually starts from post 1.
+            // With `near_post_number` the batch is centered elsewhere and
+            // `posts.first` is not the OP — in that case preserve whatever was
+            // cached from a prior same-topic load (set to nil above for a new
+            // topic), so `opUsername` keeps reporting the real OP.
+            if detail.postStream.posts.first?.postNumber == 1 {
+                firstPost = detail.postStream.posts.first
+            }
 
             // Range tracking — derive from the first/last posts actually returned
             // rather than assuming start = 0. `near_post_number` can return a range
@@ -364,7 +380,11 @@ final class TopicDetailViewModel {
         parsedBlocks.removeAll()
         postsById.removeAll()
         loadedPostIds.removeAll()
-        firstPost = nil
+        // Intentionally keep `firstPost`: the OP doesn't change when jumping
+        // within the same topic, and the new batch typically won't contain
+        // post 1, so clearing here would make `opUsername` fall back to
+        // whoever lands at the top of the centered window — wrongly marking
+        // that user's posts as OP after a search/notification entry.
 
         do {
             let response = try await api.fetchTopicPosts(topicId: topicId, postIds: batch)
@@ -374,6 +394,11 @@ final class TopicDetailViewModel {
             for post in sortedPosts {
                 loadedPostIds.insert(post.id)
                 parseAndStore(post: post)
+            }
+            // If the jump landed on the very first batch, refresh the cache
+            // from the freshly-loaded post 1.
+            if let op = sortedPosts.first, op.postNumber == 1 {
+                firstPost = op
             }
             loadedRangeStart = targetIndex
             loadedRangeEnd = endIndex

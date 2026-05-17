@@ -36,7 +36,7 @@ Dexo is a native iOS Discourse forum client (UIKit, iOS 17+). No SwiftUI.
 - `dexo/Core/Settings/` — `AppSettings` (`@Observable` singleton) for user preferences
 - `Packages/CookedHTML/` — Local Swift package for parsing Discourse-cooked HTML into `BlockNode`/`InlineNode` trees, with `NSAttributedString` rendering support
 
-**Topic rendering** uses both a WKWebView snapshot path (JS messaging extracts interactive regions) and native UIKit block renderers under `dexo/Features/ForumDetail/TopicDetail/NativeContent/`.
+**Topic rendering** is fully native — posts go through the UIKit block renderers under `dexo/Features/ForumDetail/TopicDetail/NativeContent/` (one renderer per `ContentBlock` type, all summed into `PostNativeCell`'s content stack). Block heights are precomputed by `BlockHeightCalculator` so `heightForRowAt` doesn't fall back to `systemLayoutSizeFitting`; whenever you change a renderer, mirror the layout math in the calculator's matching case.
 
 ## Localization
 

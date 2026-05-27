@@ -1,4 +1,9 @@
 What to Test
 
-- Added a "Pass Challenge" entry in the personal center for linux.do (opens the Cloudflare challenge page with your existing login)
-- Re-enabled reactions on linux.do — if a reaction fails, pass the challenge first and retry
+- New tree view (toggle in the topic detail nav bar): replies render as a nested tree with curved connectors; tap +/- to collapse or expand a subtree
+- Collapsed parents shrink to a one-line summary row (avatar + expand button + username · N replies)
+- Tree / flat preference is persisted between topic opens
+- OP highlight switched from a blue "OP" badge to a themed pill behind the username
+- Tapping @username on a reply previews the post being replied to (fixes the case where it sometimes showed the wrong post)
+- Topic open prompts you to pass the Cloudflare challenge if linux.do trips the gate
+- Tables now lay out at their natural width, scroll horizontally, and open fullscreen in landscape

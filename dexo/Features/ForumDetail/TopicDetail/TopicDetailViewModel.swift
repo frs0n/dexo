@@ -557,6 +557,79 @@ final class TopicDetailViewModel {
         return false
     }
 
+    /// Splice a freshly-created reply into the in-memory nested tree so it shows
+    /// up immediately, without refetching the whole `/n/...` payload. `parentId`
+    /// is the id of the post that was replied to — `nil` (or the OP's id) makes
+    /// it a new top-level reply. Returns false when there's no server tree to
+    /// splice into, so the caller can fall back to a full reload.
+    ///
+    /// Inserting locally (vs. reloading) also guarantees the reply is visible
+    /// even when the server's nested view hasn't caught up to it yet or would
+    /// have paginated it out of the current root window.
+    @discardableResult
+    func insertReplyIntoTree(_ post: DiscourseTopicDetail.Post, parentId: Int?) -> Bool {
+        guard isTreeMode, nestedTreeRoots != nil else { return false }
+
+        // Leaf node — store a bare copy in the id-keyed maps, matching how
+        // `ingestNested` keeps tree shape out of `postsById`.
+        var leaf = post
+        leaf.children = nil
+        parseAndStore(post: leaf)
+
+        var roots = nestedTreeRoots ?? []
+        if let parentId, parentId != nestedTreeOpPost?.id,
+           appendChild(leaf, toParentId: parentId, in: &roots)
+        {
+            nestedTreeRoots = roots
+        } else {
+            // Reply to the OP / topic, or a parent that isn't in the loaded
+            // tree: it becomes a new root-level reply (depth 1).
+            nestedTreeRoots = roots + [leaf]
+        }
+
+        // Keep the id-indexed bookkeeping and synthesized topic in sync.
+        allPostIds = Array(postsById.keys)
+        loadedPostIds = Set(postsById.keys)
+        loadedRangeEnd = allPostIds.count
+        if var existing = topic {
+            existing.postStream = DiscourseTopicDetail.PostStream(
+                posts: Array(postsById.values),
+                stream: nil
+            )
+            topic = existing
+        }
+
+        // The reply's ancestors may have been collapsed when the user tapped
+        // reply — uncollapse them so the new row is actually visible.
+        expandAncestors(ofPostNumber: leaf.postNumber)
+
+        if isReady { isReady = false }
+        isReady = true
+        return true
+    }
+
+    /// Recursively find `parentId` in the nested tree and append `child` to its
+    /// `children`. Returns true once spliced in.
+    private func appendChild(
+        _ child: DiscourseTopicDetail.Post,
+        toParentId parentId: Int,
+        in nodes: inout [DiscourseTopicDetail.Post]
+    ) -> Bool {
+        for i in nodes.indices {
+            if nodes[i].id == parentId {
+                nodes[i].children = (nodes[i].children ?? []) + [child]
+                return true
+            }
+            if var kids = nodes[i].children,
+               appendChild(child, toParentId: parentId, in: &kids)
+            {
+                nodes[i].children = kids
+                return true
+            }
+        }
+        return false
+    }
+
     /// Loads the topic. When `nearPostNumber > 1` is supplied, the initial batch
     /// returned by Discourse is centered on that floor — saving a second round-trip
     /// for deep-link entries (notification tap, reply link, direct URL).

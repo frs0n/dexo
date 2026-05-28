@@ -1102,8 +1102,12 @@ final class TopicDetailViewController: ObservableViewController {
     /// Apply `snapshot` after a load-more append, preserving the current
     /// scroll position so the user's reading position doesn't jump.
     private func applyLoadMoreSnapshot(addedPostIds: [Int]) {
-        precomputeHeightsSync(forPostIds: addedPostIds)
+        // Build first: iterating `visiblePosts` recomputes `postDepths`, which
+        // `precomputeHeightsSync` reads to size each new tree-mode row at its
+        // depth-indented width. Measuring before the depths refresh sizes the
+        // freshly-loaded (deeper) posts at the flat full width and clips them.
         let snapshot = buildSnapshot()
+        precomputeHeightsSync(forPostIds: addedPostIds)
         let offsetBefore = tableView.contentOffset
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -2419,10 +2423,36 @@ extension TopicDetailViewController: PostCellDelegate {
     }
 
     func postCell(didToggleCollapseForPostId postId: Int) {
+        // Pin the tapped row to its current spot in the viewport. Toggling
+        // shows/hides its whole subtree (a large height change); without
+        // anchoring, the row jumps away from where the user just tapped.
+        let anchorDistance: CGFloat? = dataSource.indexPath(for: .post(postId)).map {
+            tableView.rectForRow(at: $0).minY - tableView.contentOffset.y
+        }
+
         viewModel.toggleCollapse(postId: postId)
-        invalidateRenderCaches()
-        let snapshot = buildSnapshot()
-        dataSource.applySnapshotUsingReloadData(snapshot)
+        // Collapsing changes neither the depth nor the width of the surviving
+        // posts, so their precomputed heights and cached content views stay
+        // valid. The old `invalidateRenderCaches()` here wiped them, forcing
+        // every off-screen row back to the 200pt estimate — which threw off the
+        // cumulative-height math and made the scroll position jump on toggle.
+        var snapshot = buildSnapshot()
+        // The toggled post swaps cell type (full post <-> collapsed summary),
+        // so reload it explicitly — same item identity means the diff would
+        // otherwise reuse the stale cell.
+        snapshot.reloadItems([.post(postId)])
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        dataSource.apply(snapshot, animatingDifferences: false)
+        if let anchorDistance, let newIndexPath = dataSource.indexPath(for: .post(postId)) {
+            tableView.layoutIfNeeded()
+            let target = tableView.rectForRow(at: newIndexPath).minY - anchorDistance
+            let minOffset = -tableView.adjustedContentInset.top
+            let maxOffset = max(minOffset, tableView.contentSize.height - tableView.bounds.height + tableView.adjustedContentInset.bottom)
+            tableView.contentOffset.y = min(max(target, minOffset), maxOffset)
+        }
+        CATransaction.commit()
+        lastScrollOffset = tableView.contentOffset.y
     }
 
     func postCell(didTapReplyReferenceForPost post: DiscourseTopicDetail.Post) {
@@ -2479,35 +2509,63 @@ extension TopicDetailViewController: PostCellDelegate {
             replyToPost: post,
             baseURL: baseURL
         )
-        composer.onPostCreated = { [weak self] _, newPostNumber in
+        composer.onPostCreated = { [weak self] newPostId, newPostNumber in
             guard let self else { return }
             self.pendingScrollIndexPath = nil
-            self.invalidateRenderCaches()
-            let token = self.enterPaginationContext(.jumping)
-            Task { [weak self] in
-                guard let self else { return }
-                // In tree mode the new reply sits under its parent in the
-                // DFS order, not at the end of a flat stream. Refetch the
-                // server-supplied tree so the position is authoritative,
-                // then scroll to the new post number.
-                if self.viewModel.isTreeMode {
-                    await self.viewModel.loadNestedTopic(id: self.topicId)
-                    // Make sure the new reply is reachable in the visible
-                    // tree even if its parent (or any further ancestor) was
-                    // collapsed when the user tapped reply.
-                    self.viewModel.expandAncestors(ofPostNumber: newPostNumber)
-                } else {
+
+            // Flat mode: the stream position is server-assigned, so refetch
+            // centered on the new floor and land on it.
+            guard self.viewModel.isTreeMode else {
+                self.invalidateRenderCaches()
+                let token = self.enterPaginationContext(.jumping)
+                Task { [weak self] in
+                    guard let self else { return }
                     await self.viewModel.loadTopic(
                         id: self.topicId,
                         containerWidth: self.view.bounds.width,
                         nearPostNumber: newPostNumber
                     )
+                    self.handleLoadErrorIfNeeded()
+                    guard self.paginationTokenIsCurrent(token) else { return }
+                    // Land the new reply at the bottom of the screen so the
+                    // composer's last visible content stays in focus.
+                    self.applyJumpSnapshot(target: newPostNumber, position: .bottom)
+                    self.endPaginationContext(token)
                 }
-                self.handleLoadErrorIfNeeded()
+                return
+            }
+
+            // Tree mode: splice the single new reply under its parent in the
+            // in-memory tree instead of reloading the whole nested topic. This
+            // keeps every other post's cached height/content intact and shows
+            // the reply right away even if the server's nested view lags.
+            let parentId = post?.id
+            let token = self.enterPaginationContext(.jumping)
+            Task { [weak self] in
+                guard let self else { return }
+                var spliced = false
+                if let newPost = try? await self.api.fetchPost(id: newPostId) {
+                    guard self.paginationTokenIsCurrent(token) else { return }
+                    spliced = self.viewModel.insertReplyIntoTree(newPost, parentId: parentId)
+                }
                 guard self.paginationTokenIsCurrent(token) else { return }
-                // Land the new reply at the bottom of the screen so the
-                // composer's last visible content stays in focus.
-                self.applyJumpSnapshot(target: newPostNumber, position: .bottom)
+                if spliced {
+                    // `visiblePosts` recomputes `postDepths`; read it before
+                    // measuring so the new row is sized at its real indented
+                    // width rather than the flat full width.
+                    _ = self.viewModel.visiblePosts
+                    self.precomputeHeightsSync(forPostIds: [newPostId])
+                    self.applyJumpSnapshot(target: newPostNumber, position: .bottom)
+                } else {
+                    // Couldn't fetch / splice the post — fall back to a full
+                    // nested reload so the reply still shows up.
+                    self.invalidateRenderCaches()
+                    await self.viewModel.loadNestedTopic(id: self.topicId)
+                    self.viewModel.expandAncestors(ofPostNumber: newPostNumber)
+                    self.handleLoadErrorIfNeeded()
+                    guard self.paginationTokenIsCurrent(token) else { return }
+                    self.applyJumpSnapshot(target: newPostNumber, position: .bottom)
+                }
                 self.endPaginationContext(token)
             }
         }

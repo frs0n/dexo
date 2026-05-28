@@ -55,7 +55,10 @@
       "Bash(axe swipe *)",
       "Bash(axe touch *)",
       "Bash(axe key *)",
-      "mcp__xcodebuildmcp__stop_sim_log_cap"
+      "mcp__xcodebuildmcp__stop_sim_log_cap",
+      "Bash(git fetch *)",
+      "Bash(git merge *)",
+      "Bash(git switch *)"
     ]
   },
   "enabledMcpjsonServers": [

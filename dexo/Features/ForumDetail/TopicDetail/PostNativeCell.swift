@@ -79,28 +79,49 @@ final class TreeLineView: UIView {
         ctx.setLineCap(.square)
 
         if drawsIncoming {
-            // Ancestor trails (skip column 1 → start at i == 1).
-            let trailLimit = min(state.ancestorTrails.count, cappedDepth - 1)
-            for i in 1 ..< trailLimit where state.ancestorTrails[i] {
-                let x = Self.columnX(forDepth: i + 1)
+            // Ancestor trails (skip column 1 → start at i == 1). Walk *every*
+            // ancestor, but clamp each column to the max indent level: past the
+            // cap all levels share one spine column, so a deep descendant row
+            // must still redraw those ancestors' pass-through lines. Capping the
+            // loop by depth (the old behaviour) dropped them, breaking an
+            // ancestor's sibling spine wherever a deeper subtree sat between it
+            // and its next sibling. Columns repeat once clamped — harmless
+            // overdraw of the same vertical.
+            for i in 1 ..< state.ancestorTrails.count where state.ancestorTrails[i] {
+                let x = Self.columnX(forDepth: min(i + 1, PostNativeCell.treeMaxIndentLevels))
                 ctx.move(to: CGPoint(x: x, y: 0))
                 ctx.addLine(to: CGPoint(x: x, y: rect.height))
             }
 
-            // Own L-elbow at the current depth column, curving into the avatar.
+            // Own connector at the current depth column.
             let x = Self.columnX(forDepth: cappedDepth)
             let stubEndX = x + PostNativeCell.treeIndentStep * 0.5
             let radius = min(cornerRadius, PostNativeCell.treeIndentStep * 0.5)
-            ctx.move(to: CGPoint(x: x, y: 0))
-            ctx.addArc(
-                tangent1End: CGPoint(x: x, y: connectorY),
-                tangent2End: CGPoint(x: x + radius, y: connectorY),
-                radius: radius
-            )
-            ctx.addLine(to: CGPoint(x: stubEndX, y: connectorY))
-            if !state.isLastSibling {
-                ctx.move(to: CGPoint(x: x, y: connectorY))
+            if state.isLastSibling {
+                // Last child: the spine drops in, rounds the corner, and runs
+                // out to the avatar — nothing continues below.
+                ctx.move(to: CGPoint(x: x, y: 0))
+                ctx.addArc(
+                    tangent1End: CGPoint(x: x, y: connectorY),
+                    tangent2End: CGPoint(x: x + radius, y: connectorY),
+                    radius: radius
+                )
+                ctx.addLine(to: CGPoint(x: stubEndX, y: connectorY))
+            } else {
+                // Non-last child: the spine passes straight through so the
+                // sibling line stays unbroken, and a *curved* branch peels off
+                // it into the avatar. Drawing the full spine first (rather than
+                // routing it through the arc) is what closes the corner gap —
+                // the branch just overlaps the spine at its start point.
+                ctx.move(to: CGPoint(x: x, y: 0))
                 ctx.addLine(to: CGPoint(x: x, y: rect.height))
+                ctx.move(to: CGPoint(x: x, y: connectorY - radius))
+                ctx.addArc(
+                    tangent1End: CGPoint(x: x, y: connectorY),
+                    tangent2End: CGPoint(x: x + radius, y: connectorY),
+                    radius: radius
+                )
+                ctx.addLine(to: CGPoint(x: stubEndX, y: connectorY))
             }
         }
 

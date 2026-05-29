@@ -3663,6 +3663,22 @@
         }
       }
     },
+    "topic_detail.view_more_replies %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View %lld more replies"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看其它 %lld 条"
+          }
+        }
+      }
+    },
     "topic_detail.jump.confirm" : {
       "localizations" : {
         "en" : {

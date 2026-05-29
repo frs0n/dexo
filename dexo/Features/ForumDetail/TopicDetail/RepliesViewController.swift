@@ -355,6 +355,10 @@ extension RepliesViewController: PostCellDelegate {
         // No tree-mode UI in the replies list; nothing to collapse.
     }
 
+    func postCell(didTapLoadMoreChildrenForParentId parentPostId: Int) {
+        // No tree-mode UI in the replies list; nothing to expand.
+    }
+
     func postCell(didToggleBookmarkForPost post: DiscourseTopicDetail.Post, isBookmarked: Bool) {
         Task {
             do {

@@ -7,6 +7,9 @@ import UIKit
 private nonisolated enum TopicDetailItem: Hashable, Sendable {
     case post(Int)
     case boosts(Int)
+    /// Tree-mode "view N more replies" row, keyed by the parent post whose
+    /// extra direct replies it expands.
+    case loadMoreChildren(Int)
 }
 
 // MARK: - Topic Read Tracker
@@ -249,6 +252,7 @@ final class TopicDetailViewController: ObservableViewController {
         tv.translatesAutoresizingMaskIntoConstraints = false
         tv.register(PostNativeCell.self, forCellReuseIdentifier: PostNativeCell.reuseIdentifier)
         tv.register(PostCollapsedCell.self, forCellReuseIdentifier: PostCollapsedCell.reuseIdentifier)
+        tv.register(LoadMoreChildrenCell.self, forCellReuseIdentifier: LoadMoreChildrenCell.reuseIdentifier)
         tv.register(BoostCell.self, forCellReuseIdentifier: BoostCell.reuseIdentifier)
         tv.delegate = self
         tv.separatorStyle = .none
@@ -345,6 +349,22 @@ final class TopicDetailViewController: ObservableViewController {
                 delegate: self,
                 assetBaseURL: self.assetBaseURL,
                 contentWidth: tableView.bounds.width - 24
+            )
+            return cell
+
+        case .loadMoreChildren(let parentId):
+            guard let load = self.viewModel.pendingChildLoads[parentId],
+                  let cell = tableView.dequeueReusableCell(withIdentifier: LoadMoreChildrenCell.reuseIdentifier, for: indexPath) as? LoadMoreChildrenCell
+            else {
+                return UITableViewCell()
+            }
+            cell.configure(
+                parentPostId: parentId,
+                remaining: load.remaining,
+                treeDepth: load.depth,
+                treeLineState: load.treeLineState,
+                isLoading: self.viewModel.loadingChildrenParentIds.contains(parentId),
+                delegate: self
             )
             return cell
         }
@@ -930,14 +950,34 @@ final class TopicDetailViewController: ObservableViewController {
     private func buildSnapshot() -> NSDiffableDataSourceSnapshot<Int, TopicDetailItem> {
         var snapshot = NSDiffableDataSourceSnapshot<Int, TopicDetailItem>()
         snapshot.appendSections([0])
+        // Read visiblePosts first — accessing it recomputes the tree flatten,
+        // which is what populates `pendingChildLoads`.
+        let visible = viewModel.visiblePosts
+        // Map each "view more" row's anchor post → the parents whose extra
+        // replies it expands, so we can interleave the row(s) right after the
+        // parent's last loaded descendant. A parent and its last child can
+        // share an anchor when both have unfetched replies — render the deeper
+        // one first so indentation reads top-to-bottom like the rest of the tree.
+        var anchorToParents: [Int: [PendingChildLoad]] = [:]
+        if viewModel.isTreeMode {
+            for load in viewModel.pendingChildLoads.values {
+                anchorToParents[load.anchorPostId, default: []].append(load)
+            }
+            for key in anchorToParents.keys {
+                anchorToParents[key]?.sort { $0.depth > $1.depth }
+            }
+        }
         var seen = Set<Int>()
         var items: [TopicDetailItem] = []
-        for post in viewModel.visiblePosts {
+        for post in visible {
             guard viewModel.parsedBlocks[post.id] != nil,
                   seen.insert(post.id).inserted else { continue }
             items.append(.post(post.id))
             if viewModel.expandedBoostPostIds.contains(post.id) {
                 items.append(.boosts(post.id))
+            }
+            for load in anchorToParents[post.id] ?? [] {
+                items.append(.loadMoreChildren(load.parentPostId))
             }
         }
         snapshot.appendItems(items, toSection: 0)
@@ -1046,7 +1086,7 @@ final class TopicDetailViewController: ObservableViewController {
         {
             let postId: Int
             switch item {
-            case .post(let id), .boosts(let id): postId = id
+            case .post(let id), .boosts(let id), .loadMoreChildren(let id): postId = id
             }
             let cellMinY = tableView.rectForRow(at: topVisible).minY
             let screenY = cellMinY - tableView.contentOffset.y
@@ -1538,17 +1578,24 @@ extension TopicDetailViewController: TopicDetailBottomBarDelegate {
     }
 
     /// Convert a `visiblePosts` index into the table view's row index, taking
-    /// into account that each preceding post with an **expanded** boost row
-    /// adds one extra row to the snapshot. Clamped to the current row count
-    /// to defend against a snapshot/cell-state mismatch (out-of-bounds crash).
+    /// into account that each preceding post with an **expanded** boost row —
+    /// or a trailing tree-mode "view more replies" row — adds one extra row to
+    /// the snapshot. Clamped to the current row count to defend against a
+    /// snapshot/cell-state mismatch (out-of-bounds crash).
     private func tableRow(forVisiblePostIndex postIndex: Int) -> Int? {
         let rowCount = tableView.numberOfRows(inSection: 0)
         guard rowCount > 0 else { return nil }
         var targetRow = postIndex
         let expanded = viewModel.expandedBoostPostIds
         let visible = viewModel.visiblePosts
-        for i in 0..<min(postIndex, visible.count) where expanded.contains(visible[i].id) {
-            targetRow += 1
+        // Count of "view more" rows anchored after each post (inserted below).
+        var loadMoreCounts: [Int: Int] = [:]
+        for load in viewModel.pendingChildLoads.values {
+            loadMoreCounts[load.anchorPostId, default: 0] += 1
+        }
+        for i in 0..<min(postIndex, visible.count) {
+            if expanded.contains(visible[i].id) { targetRow += 1 }
+            targetRow += loadMoreCounts[visible[i].id] ?? 0
         }
         return min(targetRow, rowCount - 1)
     }
@@ -1566,7 +1613,7 @@ extension TopicDetailViewController: TopicDetailBottomBarDelegate {
             guard let item = dataSource.itemIdentifier(for: indexPath) else { continue }
             let postId: Int
             switch item {
-            case .post(let id), .boosts(let id):
+            case .post(let id), .boosts(let id), .loadMoreChildren(let id):
                 postId = id
             }
             if let post = viewModel.postsById[postId] {
@@ -1792,6 +1839,10 @@ extension TopicDetailViewController: TopicDetailBottomBarDelegate {
 
 extension TopicDetailViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
+        // The tree-mode "view more replies" row is a fixed-size compact row.
+        if case .loadMoreChildren = dataSource.itemIdentifier(for: indexPath) {
+            return LoadMoreChildrenCell.cellHeight
+        }
         // Collapsed parents render as a fixed-size compact row — short-circuit
         // both the layout solver and the precompute cache.
         if case .post(let postId) = dataSource.itemIdentifier(for: indexPath),
@@ -1810,6 +1861,9 @@ extension TopicDetailViewController: UITableViewDelegate {
     }
 
     func tableView(_ tableView: UITableView, estimatedHeightForRowAt indexPath: IndexPath) -> CGFloat {
+        if case .loadMoreChildren = dataSource.itemIdentifier(for: indexPath) {
+            return LoadMoreChildrenCell.cellHeight
+        }
         if case .post(let postId) = dataSource.itemIdentifier(for: indexPath),
            viewModel.isTreeMode, viewModel.collapsedPostIds.contains(postId)
         {
@@ -2453,6 +2507,25 @@ extension TopicDetailViewController: PostCellDelegate {
         }
         CATransaction.commit()
         lastScrollOffset = tableView.contentOffset.y
+    }
+
+    func postCell(didTapLoadMoreChildrenForParentId parentPostId: Int) {
+        Task { [weak self] in
+            guard let self else { return }
+            let added = await self.viewModel.loadMoreChildren(forParentId: parentPostId)
+            // Size new posts before they enter the table so the row heights
+            // (and the cumulative-height math) are correct on first display.
+            if !added.isEmpty {
+                self.precomputeHeightsSync(forPostIds: added)
+            }
+            var snapshot = self.buildSnapshot()
+            // On failure the "view more" row survives the rebuild — reload it so
+            // the cell's spinner resets back to the tappable state.
+            if added.isEmpty, snapshot.itemIdentifiers.contains(.loadMoreChildren(parentPostId)) {
+                snapshot.reloadItems([.loadMoreChildren(parentPostId)])
+            }
+            await self.dataSource.apply(snapshot, animatingDifferences: false)
+        }
     }
 
     func postCell(didTapReplyReferenceForPost post: DiscourseTopicDetail.Post) {

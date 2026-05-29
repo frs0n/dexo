@@ -14,6 +14,12 @@ enum DiscourseRouter {
     /// `has_more_roots` in the response signals whether further `page=N+1`
     /// requests are needed.
     case nestedTopic(id: Int, slug: String?, sort: String?, page: Int)
+    /// `GET /n/{slug}/{topicId}/children/{postNumber}.json` — fetches the
+    /// direct replies under one post in the nested view. The top-level
+    /// `/n/...` payload inlines at most three children per node; this endpoint
+    /// returns the full (paginated) direct-reply list so the UI can expand a
+    /// "view more replies" affordance. `depth=1` keeps it to direct children.
+    case nestedChildren(topicId: Int, postNumber: Int, slug: String?, sort: String?, page: Int)
     case post(id: Int)
     case postByNumber(topicId: Int, postNumber: Int)
     case notifications(limit: Int? = nil, filter: String? = nil)
@@ -105,6 +111,12 @@ enum DiscourseRouter {
             if page > 0 { params.append("page=\(page)") }
             let query = params.isEmpty ? "" : "?" + params.joined(separator: "&")
             return "/n/\(slugComponent)/\(id).json\(query)"
+        case .nestedChildren(let topicId, let postNumber, let slug, let sort, let page):
+            let slugComponent = slug.map { $0.isEmpty ? "-" : $0 } ?? "-"
+            var params: [String] = ["page=\(page)"]
+            if let sort, !sort.isEmpty { params.append("sort=\(sort)") }
+            params.append("depth=1")
+            return "/n/\(slugComponent)/\(topicId)/children/\(postNumber).json?" + params.joined(separator: "&")
         case .post(let id):
             return "/posts/\(id).json"
         case .postByNumber(let topicId, let postNumber):

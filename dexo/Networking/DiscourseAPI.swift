@@ -109,6 +109,13 @@ final class DiscourseAPI {
         try await request(route: .nestedTopic(id: id, slug: slug, sort: sort, page: page))
     }
 
+    /// Fetch the full direct-reply list under one post in tree mode. The main
+    /// `/n/{slug}/{id}.json` payload inlines only the first few children per
+    /// node; call this to expand the rest when the user taps "view more".
+    func fetchNestedChildren(topicId: Int, postNumber: Int, slug: String? = nil, sort: String? = nil, page: Int = 0) async throws -> DiscourseNestedChildrenResponse {
+        try await request(route: .nestedChildren(topicId: topicId, postNumber: postNumber, slug: slug, sort: sort, page: page))
+    }
+
     func fetchPostReplies(postId: Int) async throws -> [DiscourseTopicDetail.Post] {
         try await request(route: .postReplies(postId: postId))
     }

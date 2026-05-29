@@ -4,6 +4,25 @@ import CookedHTML
 
 import Perception
 
+/// Describes a "view N more replies" affordance shown at the tail of a node's
+/// loaded children in tree mode. The server inlines only the first few direct
+/// replies per post; when `directReplyCount` exceeds what's loaded, the
+/// view-model emits one of these so the view-controller can render a tappable
+/// row that fetches the remainder via `/n/.../children/{n}.json`.
+struct PendingChildLoad {
+    /// Post whose extra direct replies this row expands.
+    let parentPostId: Int
+    /// Visible row (last descendant of `parentPostId`'s loaded subtree, or the
+    /// parent itself when nothing is inlined) the row should be inserted after.
+    let anchorPostId: Int
+    /// How many more direct replies remain to load.
+    let remaining: Int
+    /// Tree depth the row renders at (parent depth + 1).
+    let depth: Int
+    /// Connector state so the row slots into the tree spine as the last sibling.
+    let treeLineState: TreeLineState
+}
+
 @Perceptible
 final class TopicDetailViewModel {
     var topic: DiscourseTopicDetail?
@@ -124,6 +143,18 @@ final class TopicDetailViewModel {
     private(set) var nestedHasMoreRoots: Bool = false
     private(set) var nestedRootsPage: Int = 0
 
+    /// "View more replies" affordances for the current tree flatten, keyed by
+    /// `parentPostId`. Recomputed as a side effect of `flattenNestedTree`. The
+    /// view-controller interleaves a tappable row after each entry's
+    /// `anchorPostId` when building its snapshot.
+    private(set) var pendingChildLoads: [Int: PendingChildLoad] = [:]
+    /// Parent post IDs with an in-flight `loadMoreChildren` request — guards
+    /// against double taps and lets the row show a spinner.
+    private(set) var loadingChildrenParentIds: Set<Int> = []
+    /// Last children page fetched per parent (for the `has_more` paginated
+    /// case). Absent means only the inline preview has loaded so far.
+    private var loadedChildPages: [Int: Int] = [:]
+
     /// DFS-flatten the loaded posts into tree order using `replyToPostNumber`
     /// as the parent edge. OP (postNumber == 1) is the root; replies with
     /// `replyToPostNumber == nil` are treated as direct replies to OP. Posts
@@ -135,6 +166,9 @@ final class TopicDetailViewModel {
     private func treeOrderedPosts(from base: [DiscourseTopicDetail.Post]) -> [DiscourseTopicDetail.Post] {
         postDepths = [:]
         postTreeLineStates = [:]
+        // The inference path has no server-authoritative child counts, so it
+        // never surfaces "view more" rows — clear any from a prior flatten.
+        pendingChildLoads = [:]
         guard !base.isEmpty else { return [] }
         let byPostNumber = Dictionary(uniqueKeysWithValues: base.map { ($0.postNumber, $0) })
 
@@ -225,6 +259,7 @@ final class TopicDetailViewModel {
     ) -> [DiscourseTopicDetail.Post] {
         postDepths = [:]
         postTreeLineStates = [:]
+        pendingChildLoads = [:]
 
         var out: [DiscourseTopicDetail.Post] = []
         out.reserveCapacity(roots.count + 1)
@@ -248,27 +283,58 @@ final class TopicDetailViewModel {
         _ nodes: [DiscourseTopicDetail.Post],
         depth: Int,
         ancestorTrails: [Bool],
+        extraTrailingSibling: Bool = false,
         into out: inout [DiscourseTopicDetail.Post]
     ) {
         let lastIndex = nodes.count - 1
         for (idx, post) in nodes.enumerated() {
-            let isLast = idx == lastIndex
+            // A trailing "view more" row counts as one more sibling, so the
+            // real last child shouldn't terminate the spine when one follows.
+            let isLast = idx == lastIndex && !extraTrailingSibling
             let kids = post.children ?? []
             let hasKids = !kids.isEmpty
             let collapsed = collapsedPostIds.contains(post.id)
+            // Direct replies the server didn't inline → a "view more" row.
+            let remaining = max(0, post.directReplyCount - kids.count)
             postDepths[post.id] = depth
             postTreeLineStates[post.id] = TreeLineState(
                 depth: depth,
                 isLastSibling: isLast,
                 ancestorTrails: ancestorTrails,
-                hasChildren: hasKids,
+                // Draw the outgoing spine when there are loaded children *or*
+                // unfetched ones a "view more" row will sit under.
+                hasChildren: hasKids || remaining > 0,
                 isCollapsed: collapsed
             )
             out.append(post)
-            if hasKids, !collapsed {
-                var nextTrails = ancestorTrails
-                nextTrails.append(!isLast)
-                dfsNested(kids, depth: depth + 1, ancestorTrails: nextTrails, into: &out)
+            guard !collapsed else { continue }
+            var nextTrails = ancestorTrails
+            nextTrails.append(!isLast)
+            if hasKids {
+                dfsNested(
+                    kids,
+                    depth: depth + 1,
+                    ancestorTrails: nextTrails,
+                    extraTrailingSibling: remaining > 0,
+                    into: &out
+                )
+            }
+            if remaining > 0 {
+                let childDepth = depth + 1
+                let anchorId = out.last?.id ?? post.id
+                pendingChildLoads[post.id] = PendingChildLoad(
+                    parentPostId: post.id,
+                    anchorPostId: anchorId,
+                    remaining: remaining,
+                    depth: childDepth,
+                    treeLineState: TreeLineState(
+                        depth: childDepth,
+                        isLastSibling: true,
+                        ancestorTrails: nextTrails,
+                        hasChildren: false,
+                        isCollapsed: false
+                    )
+                )
             }
         }
     }
@@ -385,6 +451,102 @@ final class TopicDetailViewModel {
         }
     }
 
+    /// Expand the direct replies under `parentId` that the nested view didn't
+    /// inline. Fetches the next children page via `/n/.../children/{n}.json`,
+    /// merges the returned subtrees into the in-memory tree, and re-fires
+    /// `isReady` so the view-controller rebuilds its snapshot — at which point
+    /// the "view more" row either disappears (all loaded) or re-anchors after
+    /// the newly added replies. Returns the IDs of any newly ingested posts.
+    @discardableResult
+    func loadMoreChildren(forParentId parentId: Int) async -> [Int] {
+        guard isTreeMode, nestedTreeRoots != nil,
+              !loadingChildrenParentIds.contains(parentId),
+              let parent = postsById[parentId],
+              let topicId = topic?.id ?? lastLoadedTopicId
+        else { return [] }
+
+        loadingChildrenParentIds.insert(parentId)
+        defer { loadingChildrenParentIds.remove(parentId) }
+
+        let nextPage = loadedChildPages[parentId].map { $0 + 1 } ?? 0
+        let capturedGeneration = loadGeneration
+
+        do {
+            let response = try await api.fetchNestedChildren(
+                topicId: topicId,
+                postNumber: parent.postNumber,
+                slug: nil,
+                sort: treeSort,
+                page: nextPage
+            )
+            // Bail if the window was reset under us (jumpToFloor, mode flip).
+            guard loadGeneration == capturedGeneration else { return [] }
+
+            var added: [Int] = []
+            for child in response.children {
+                ingestNested(child)
+                collectIds(in: child, into: &added)
+            }
+
+            var roots = nestedTreeRoots ?? []
+            // Page 0 is the authoritative first page (it re-includes the
+            // inlined preview), so it replaces the node's children; later
+            // pages append beyond what's already shown.
+            if mergeChildren(response.children, intoParentId: parentId, replace: nextPage == 0, in: &roots) {
+                nestedTreeRoots = roots
+            }
+            loadedChildPages[parentId] = response.page
+
+            // Keep the id-indexed bookkeeping and synthesized topic in sync.
+            if var existing = topic {
+                existing.postStream = DiscourseTopicDetail.PostStream(
+                    posts: Array(postsById.values),
+                    stream: nil
+                )
+                topic = existing
+            }
+            allPostIds = Array(postsById.keys)
+            loadedPostIds = Set(postsById.keys)
+            loadedRangeEnd = allPostIds.count
+
+            if isReady { isReady = false }
+            isReady = true
+            return added
+        } catch {
+            debugLog("[TopicDetail] Load more children failed: \(error)")
+            return []
+        }
+    }
+
+    /// Find `parentId` in the nested tree and set/extend its `children` with
+    /// `newChildren`, de-duplicating by post id. Returns true once spliced in.
+    private func mergeChildren(
+        _ newChildren: [DiscourseTopicDetail.Post],
+        intoParentId parentId: Int,
+        replace: Bool,
+        in nodes: inout [DiscourseTopicDetail.Post]
+    ) -> Bool {
+        for i in nodes.indices {
+            if nodes[i].id == parentId {
+                let base = replace ? [] : (nodes[i].children ?? [])
+                var seen = Set(base.map(\.id))
+                var merged = base
+                for child in newChildren where seen.insert(child.id).inserted {
+                    merged.append(child)
+                }
+                nodes[i].children = merged
+                return true
+            }
+            if var kids = nodes[i].children,
+               mergeChildren(newChildren, intoParentId: parentId, replace: replace, in: &kids)
+            {
+                nodes[i].children = kids
+                return true
+            }
+        }
+        return false
+    }
+
     /// Load the topic via Discourse's nested-replies endpoint. Replaces the
     /// flat post stream with the server-supplied tree, so opening a tree-mode
     /// topic doesn't suffer the "child paginated out of window" problem the
@@ -409,6 +571,9 @@ final class TopicDetailViewModel {
         nestedTreeRoots = nil
         nestedHasMoreRoots = false
         nestedRootsPage = 0
+        pendingChildLoads = [:]
+        loadingChildrenParentIds = []
+        loadedChildPages = [:]
 
         // The router accepts a nil slug and substitutes `-`, which Discourse
         // routes the same way as the real slug. No slug lookup needed.
@@ -581,6 +746,12 @@ final class TopicDetailViewModel {
            appendChild(leaf, toParentId: parentId, in: &roots)
         {
             nestedTreeRoots = roots
+            // Mirror the direct-reply bump onto the id-keyed copy so any reader
+            // of `postsById` sees the same count as the tree node.
+            if var parent = postsById[parentId] {
+                parent.directReplyCount += 1
+                postsById[parentId] = parent
+            }
         } else {
             // Reply to the OP / topic, or a parent that isn't in the loaded
             // tree: it becomes a new root-level reply (depth 1).
@@ -618,6 +789,11 @@ final class TopicDetailViewModel {
         for i in nodes.indices {
             if nodes[i].id == parentId {
                 nodes[i].children = (nodes[i].children ?? []) + [child]
+                // Bump the server-side direct-reply count too, so the "view N
+                // more replies" affordance keeps counting only the *unloaded*
+                // replies — without this the locally-inserted child would
+                // cannibalise the remaining count (`directReplyCount - loaded`).
+                nodes[i].directReplyCount += 1
                 return true
             }
             if var kids = nodes[i].children,

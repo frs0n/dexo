@@ -11,6 +11,9 @@ protocol PostCellDelegate: AnyObject {
     /// Tap the "−" / "+" pill on the tree-mode column line to collapse or
     /// re-expand this post's subtree.
     func postCell(didToggleCollapseForPostId postId: Int)
+    /// Tap the tree-mode "view N more replies" row to fetch the direct replies
+    /// the server didn't inline under `parentPostId`.
+    func postCell(didTapLoadMoreChildrenForParentId parentPostId: Int)
     func postCell(didToggleBookmarkForPost post: DiscourseTopicDetail.Post, isBookmarked: Bool)
     func postCell(didTapAvatarForUsername username: String)
     func postCell(didTapReaction reactionId: String, forPost post: DiscourseTopicDetail.Post)

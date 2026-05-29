@@ -1,6 +1,8 @@
 What to Test
 
 - New tree view (toggle in the topic detail nav bar): replies render as a nested tree with curved connectors; tap +/- to collapse or expand a subtree
+- In tree view, a post with more replies than shown gets a "View N more replies" row at the tail — tap to load the rest
+- Connector-line fixes: sibling lines no longer break at the bend, and the spine stays continuous through deep nesting
 - Collapsed parents shrink to a one-line summary row (avatar + expand button + username · N replies)
 - Tree / flat preference is persisted between topic opens
 - OP highlight switched from a blue "OP" badge to a themed pill behind the username

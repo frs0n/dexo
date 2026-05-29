@@ -249,6 +249,16 @@ struct DiscourseTopicDetail: Decodable {
         /// walks this to build its DFS render order without having to infer
         /// parent/child links from `replyToPostNumber`.
         var children: [Post]?
+        /// Number of *direct* replies this post has on the server. In the
+        /// nested view the server inlines at most three children per node, so
+        /// `directReplyCount > (children?.count ?? 0)` signals there are more
+        /// direct replies to fetch via the `/n/.../children/{n}.json` endpoint.
+        /// The view-model uses the gap to render a "view N more replies" row.
+        var directReplyCount: Int
+        /// Total descendants (direct + indirect) under this post per the
+        /// server. Decoded for completeness / future use; the view-model keys
+        /// the "view more" affordance off `directReplyCount`.
+        let totalDescendantCount: Int
         /// True for placeholder entries the nested-replies endpoint inserts
         /// in place of deleted posts. These have empty `cooked`, no author,
         /// and the only meaningful fields are `post_number` + the tree
@@ -281,6 +291,8 @@ struct DiscourseTopicDetail: Decodable {
             case polls
             case pollsVotes = "polls_votes"
             case children
+            case directReplyCount = "direct_reply_count"
+            case totalDescendantCount = "total_descendant_count"
             case deletedPostPlaceholder = "deleted_post_placeholder"
         }
 
@@ -318,6 +330,8 @@ struct DiscourseTopicDetail: Decodable {
             polls = (try? container.decodeIfPresent([Poll].self, forKey: .polls)) ?? []
             pollsVotes = (try? container.decodeIfPresent([String: [String]].self, forKey: .pollsVotes)) ?? [:]
             children = try? container.decodeIfPresent([Post].self, forKey: .children)
+            directReplyCount = (try? container.decodeIfPresent(Int.self, forKey: .directReplyCount)) ?? 0
+            totalDescendantCount = (try? container.decodeIfPresent(Int.self, forKey: .totalDescendantCount)) ?? 0
             deletedPostPlaceholder = (try? container.decodeIfPresent(Bool.self, forKey: .deletedPostPlaceholder)) ?? false
         }
     }
@@ -417,6 +431,29 @@ struct DiscourseNestedTopicResponse: Decodable {
             createdAt = try? container.decodeIfPresent(String.self, forKey: .createdAt)
             tags = (try? container.decodeIfPresent([DiscourseTopicDetail.Tag].self, forKey: .tags)) ?? []
         }
+    }
+}
+
+/// Response shape from `GET /n/{slug}/{topicId}/children/{postNumber}.json` —
+/// the full direct-reply list under a single post in the nested view. Each
+/// entry carries its own (inlined) subtree just like the roots in
+/// `DiscourseNestedTopicResponse`. `hasMore` paginates the direct children.
+struct DiscourseNestedChildrenResponse: Decodable {
+    let children: [DiscourseTopicDetail.Post]
+    let hasMore: Bool
+    let page: Int
+
+    enum CodingKeys: String, CodingKey {
+        case children
+        case hasMore = "has_more"
+        case page
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        children = (try? c.decode([DiscourseTopicDetail.Post].self, forKey: .children)) ?? []
+        hasMore = (try? c.decodeIfPresent(Bool.self, forKey: .hasMore)) ?? false
+        page = (try? c.decodeIfPresent(Int.self, forKey: .page)) ?? 0
     }
 }
 

@@ -36,7 +36,6 @@ final class NotificationPoller {
     private static let maxConsecutiveFailures = 5
 
     private static let initialDelay: TimeInterval = 3
-    private static let pollInterval: TimeInterval = 15
 
     init(api: DiscourseAPI, usernameProvider: @escaping () -> String?) {
         self.api = api
@@ -99,10 +98,12 @@ final class NotificationPoller {
 
             guard self.userId != nil else { return }
 
+            // Continuous long-poll: the server holds each request open until
+            // there's data (or its long-poll timeout), so re-issue immediately
+            // on return instead of sleeping. A fixed delay between polls just
+            // adds a blind window where new notifications go unseen.
             while !Task.isCancelled, self.isActive, !self.circuitOpen {
                 await self.pollMessageBus()
-                if self.circuitOpen { break }
-                try? await Task.sleep(nanoseconds: UInt64(Self.pollInterval * 1_000_000_000))
             }
         }
     }

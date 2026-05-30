@@ -1,11 +1,3 @@
 What to Test
 
-- New tree view (toggle in the topic detail nav bar): replies render as a nested tree with curved connectors; tap +/- to collapse or expand a subtree
-- In tree view, a post with more replies than shown gets a "View N more replies" row at the tail — tap to load the rest
-- Connector-line fixes: sibling lines no longer break at the bend, and the spine stays continuous through deep nesting
-- Collapsed parents shrink to a one-line summary row (avatar + expand button + username · N replies)
-- Tree / flat preference is persisted between topic opens
-- OP highlight switched from a blue "OP" badge to a themed pill behind the username
-- Tapping @username on a reply previews the post being replied to (fixes the case where it sometimes showed the wrong post)
-- Topic open prompts you to pass the Cloudflare challenge if linux.do trips the gate
-- Tables now lay out at their natural width, scroll horizontally, and open fullscreen in landscape
+

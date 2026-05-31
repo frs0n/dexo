@@ -76,8 +76,8 @@ final class DiscourseAPI {
         try await request(route: .notifications(limit: limit, filter: filter))
     }
 
-    func fetchPrivateMessages(username: String) async throws -> DiscourseTopicList {
-        try await request(route: .privateMessages(username: username))
+    func fetchPrivateMessages(username: String, filter: PrivateMessageFilter = .inbox) async throws -> DiscourseTopicList {
+        try await request(route: .privateMessages(username: username, filter: filter))
     }
 
     func fetchTopic(id: Int, nearPostNumber: Int? = nil, filter: String? = nil) async throws -> DiscourseTopicDetail {

@@ -38,6 +38,21 @@ final class MessagesViewController: ObservableViewController {
         return rc
     }()
 
+    private lazy var filterControl: UISegmentedControl = {
+        let control = UISegmentedControl(items: [
+            String(localized: "messages.filter.inbox"),
+            String(localized: "messages.filter.sent"),
+        ])
+        control.selectedSegmentIndex = 0
+        control.addTarget(self, action: #selector(filterChanged), for: .valueChanged)
+        return control
+    }()
+
+    /// Currently selected PM view, derived from the segmented control.
+    private var currentFilter: PrivateMessageFilter {
+        filterControl.selectedSegmentIndex == 1 ? .sent : .inbox
+    }
+
     init(api: DiscourseAPI, authGate: AuthGating? = nil) {
         self.api = api
         self.viewModel = MessagesViewModel(api: api)
@@ -53,6 +68,7 @@ final class MessagesViewController: ObservableViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         title = String(localized: "messages.title")
+        navigationItem.titleView = filterControl
         tableView.refreshControl = refreshControl
         tableView.tableHeaderView = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: CGFloat.leastNormalMagnitude))
 
@@ -76,7 +92,7 @@ final class MessagesViewController: ObservableViewController {
         ])
 
         Task {
-            await viewModel.loadMessages(username: authGate?.currentUsername() ?? "")
+            await viewModel.loadMessages(username: authGate?.currentUsername() ?? "", filter: currentFilter)
         }
     }
 
@@ -98,8 +114,18 @@ final class MessagesViewController: ObservableViewController {
 
     @objc private func pullToRefresh() {
         Task {
-            await viewModel.loadMessages(username: authGate?.currentUsername() ?? "")
+            await viewModel.loadMessages(username: authGate?.currentUsername() ?? "", filter: currentFilter)
             refreshControl.endRefreshing()
+        }
+    }
+
+    @objc private func filterChanged() {
+        // Clear the current list immediately so the table doesn't show the
+        // previous filter's rows while the new view loads.
+        viewModel.messages = []
+        tableView.reloadData()
+        Task {
+            await viewModel.loadMessages(username: authGate?.currentUsername() ?? "", filter: currentFilter)
         }
     }
 }

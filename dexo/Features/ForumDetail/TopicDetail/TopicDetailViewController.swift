@@ -591,6 +591,14 @@ final class TopicDetailViewController: ObservableViewController {
         Task {
             let jumpFloor = initialFloor
             initialFloor = nil
+            // Deep-link entry to a specific floor (notification / search / PM /
+            // bookmark): tree mode can't locate an arbitrary floor — posts are in
+            // DFS order and `allPostIds` is hash-keyed, so `jumpToFloor`'s index
+            // math addresses the wrong post. Force-exit to the flat stream first
+            // so the target floor resolves against the canonical ordered stream.
+            if let jumpFloor, jumpFloor > 1 {
+                exitTreeModeSideEffects()
+            }
             let token = enterPaginationContext(.jumping)
             if viewModel.isTreeMode {
                 await viewModel.loadNestedTopic(id: topicId)
@@ -1635,8 +1643,22 @@ extension TopicDetailViewController: TopicDetailBottomBarDelegate {
     }
 
     private func performJump(toFloor floor: Int) {
+        guard floor >= 1 else { return }
+
+        // Tree mode can't locate an arbitrary floor reliably: posts are in DFS
+        // order, the target may be a deep or not-yet-loaded child, and
+        // `allPostIds` is hash-keyed rather than stream-ordered there — so
+        // `jumpToFloor`'s index math would address the wrong post. Force-exit to
+        // the flat stream, reload, then jump. Done before the `totalFloors`
+        // bound check below: in tree mode that count reflects only the loaded
+        // subtree, so a valid higher floor would otherwise be wrongly rejected.
+        if viewModel.isTreeMode {
+            performJumpAfterExitingTreeMode(toFloor: floor)
+            return
+        }
+
         let total = viewModel.totalFloors
-        guard floor >= 1, floor <= total else { return }
+        guard floor <= total else { return }
 
         // Fast path: floor already in the current window — just scroll.
         // Take the .jumping context for the duration of the animation so the
@@ -1673,6 +1695,40 @@ extension TopicDetailViewController: TopicDetailBottomBarDelegate {
             endPaginationContext(token)
             hideJumpOverlay()
         }
+    }
+
+    /// Drop out of tree mode, reload the flat stream centered on `floor`, then
+    /// scroll there. `jumpToFloor` can't run against the tree window
+    /// (`allPostIds` is hash-keyed), so we re-fetch via the flat endpoint —
+    /// `near_post_number` lands the target in the loaded window in one request.
+    private func performJumpAfterExitingTreeMode(toFloor floor: Int) {
+        exitTreeModeSideEffects()
+        showJumpOverlay()
+        hasTitleHeader = false
+        let token = enterPaginationContext(.jumping)
+        Task {
+            await viewModel.loadTopic(id: topicId, containerWidth: view.bounds.width, nearPostNumber: floor)
+            guard paginationTokenIsCurrent(token) else {
+                hideJumpOverlay()
+                return
+            }
+            applyJumpSnapshot(target: floor, position: .top)
+            endPaginationContext(token)
+            hideJumpOverlay()
+        }
+    }
+
+    /// Side effects of leaving tree mode without re-fetching: flip the flag,
+    /// refresh the toolbar toggle + bottom bar, and wipe render caches (tree
+    /// indent shrinks the content width, so every cached height is stale).
+    /// Deliberately does NOT persist `AppSettings.topicTreeMode` — a forced exit
+    /// for a jump shouldn't permanently change the user's default reading mode.
+    private func exitTreeModeSideEffects() {
+        guard viewModel.isTreeMode else { return }
+        viewModel.isTreeMode = false
+        navigationItem.rightBarButtonItem = treeModeBarButtonItem()
+        updateBottomBarVisibility()
+        invalidateRenderCaches()
     }
 
     private func showJumpOverlay() {
@@ -2464,7 +2520,17 @@ extension TopicDetailViewController: PostCellDelegate {
     }
 
     func postCell(didTapAvatarForUsername username: String) {
-        let vc = UserProfileViewController(api: api, username: username)
+        // Carry this topic's title + link into the profile so its "send
+        // message" composer is prefilled, mirroring the web "message about this
+        // topic" flow.
+        let prefillTitle = viewModel.topic?.title
+        let prefillBody = prefillTitle.map { "[\($0)](\(baseURL)/t/\(topicId))" }
+        let vc = UserProfileViewController(
+            api: api,
+            username: username,
+            messagePrefillTitle: prefillTitle,
+            messagePrefillBody: prefillBody
+        )
         navigationController?.pushViewController(vc, animated: true)
     }
 

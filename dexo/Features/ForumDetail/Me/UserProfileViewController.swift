@@ -21,9 +21,16 @@ final class UserProfileViewController: ObservableViewController {
         return ai
     }()
 
-    init(api: DiscourseAPI, username: String) {
+    /// Prefill context for the "send message" composer, set when this profile
+    /// is opened from a topic so the PM carries that topic's title + link.
+    private let messagePrefillTitle: String?
+    private let messagePrefillBody: String?
+
+    init(api: DiscourseAPI, username: String, messagePrefillTitle: String? = nil, messagePrefillBody: String? = nil) {
         self.api = api
         self.viewModel = UserProfileViewModel(api: api, username: username)
+        self.messagePrefillTitle = messagePrefillTitle
+        self.messagePrefillBody = messagePrefillBody
         super.init(nibName: nil, bundle: nil)
         hidesBottomBarWhenPushed = true
     }
@@ -139,37 +146,23 @@ final class UserProfileViewController: ObservableViewController {
     // MARK: - Actions
 
     private func presentMessageComposer() {
-        let alert = UIAlertController(
-            title: String(localized: "user.send_message"),
-            message: String(localized: "user.message_to \(viewModel.username)"),
-            preferredStyle: .alert
+        let composer = MessageComposerViewController(
+            api: api,
+            recipients: viewModel.username,
+            prefillTitle: messagePrefillTitle,
+            prefillBody: messagePrefillBody
         )
-        alert.addTextField { tf in
-            tf.placeholder = String(localized: "user.message_subject")
+        composer.onSent = { [weak self] in
+            self?.presentMessageSentConfirmation()
         }
-        alert.addTextField { tf in
-            tf.placeholder = String(localized: "user.message_body")
-        }
-        alert.addAction(UIAlertAction(title: String(localized: "user.send"), style: .default) { [weak self] _ in
-            guard let self,
-                  let title = alert.textFields?[0].text, !title.isEmpty,
-                  let body = alert.textFields?[1].text, !body.isEmpty
-            else { return }
-            Task {
-                do {
-                    try await self.viewModel.sendMessage(title: title, body: body)
-                    let done = UIAlertController(title: nil, message: String(localized: "user.message_sent"), preferredStyle: .alert)
-                    done.addAction(UIAlertAction(title: String(localized: "action.ok"), style: .default))
-                    self.present(done, animated: true)
-                } catch {
-                    let fail = UIAlertController(title: nil, message: error.localizedDescription, preferredStyle: .alert)
-                    fail.addAction(UIAlertAction(title: String(localized: "action.ok"), style: .default))
-                    self.present(fail, animated: true)
-                }
-            }
-        })
-        alert.addAction(UIAlertAction(title: String(localized: "action.cancel"), style: .cancel))
-        present(alert, animated: true)
+        let nav = UINavigationController(rootViewController: composer)
+        present(nav, animated: true)
+    }
+
+    private func presentMessageSentConfirmation() {
+        let done = UIAlertController(title: nil, message: String(localized: "user.message_sent"), preferredStyle: .alert)
+        done.addAction(UIAlertAction(title: String(localized: "action.ok"), style: .default))
+        present(done, animated: true)
     }
 
     // MARK: - Stat Taps

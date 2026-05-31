@@ -1,6 +1,22 @@
 import Alamofire
 import Foundation
 
+/// Which Discourse private-message view to fetch. `inbox` is the default
+/// `private-messages` list; `sent` is `private-messages-sent` (messages the
+/// user started, including ones the recipient hasn't replied to yet).
+enum PrivateMessageFilter {
+    case inbox
+    case sent
+
+    /// URL path segment Discourse uses for this view.
+    var pathSegment: String {
+        switch self {
+        case .inbox: return "private-messages"
+        case .sent: return "private-messages-sent"
+        }
+    }
+}
+
 enum DiscourseRouter {
     case latestTopics(page: Int)
     case hotTopics(page: Int)
@@ -23,7 +39,7 @@ enum DiscourseRouter {
     case post(id: Int)
     case postByNumber(topicId: Int, postNumber: Int)
     case notifications(limit: Int? = nil, filter: String? = nil)
-    case privateMessages(username: String)
+    case privateMessages(username: String, filter: PrivateMessageFilter)
     case createTopic
     case createBoost(postId: Int)
     case postReplies(postId: Int)
@@ -128,8 +144,8 @@ enum DiscourseRouter {
             if let filter { params.append("filter=\(filter)") }
             if !params.isEmpty { path += "?" + params.joined(separator: "&") }
             return path
-        case .privateMessages(let username):
-            return "/topics/private-messages/\(username).json"
+        case .privateMessages(let username, let filter):
+            return "/topics/\(filter.pathSegment)/\(username).json"
         case .createTopic:
             return "/posts.json"
         case .createBoost(let postId):
